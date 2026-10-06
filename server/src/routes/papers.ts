@@ -7,19 +7,20 @@ import type { Db } from "../db/client.js";
 import { papers, type PaperRow } from "../db/schema.js";
 
 export function toPaper(row: PaperRow): Paper {
-  return {
+  const base = {
     id: row.id,
     title: row.title,
     authors: row.authors,
     year: row.year,
     abstract: row.abstract,
     url: row.url,
-    externalId: row.externalId,
-    source: row.source,
     hasPdf: row.pdfPath !== null,
     summary: row.summary,
     createdAt: row.createdAt,
   };
+  if (row.source === "upload") return { ...base, source: "upload" };
+  if (row.externalId === null) throw new Error(`Search paper ${row.id} has no externalId`);
+  return { ...base, source: "search", externalId: row.externalId };
 }
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() });

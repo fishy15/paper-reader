@@ -18,14 +18,14 @@ hw/
   package.json            (workspaces: shared, server, web)
   tsconfig.base.json      (strict, noUncheckedIndexedAccess)
   .env.example
-  shared/src/schemas.ts   Zod schemas + inferred types: Paper, SearchResult, ChatMessage
+  shared/src/schemas.ts   Zod schemas + inferred types: Paper, SearchResult, QaMessage
   server/src/
     index.ts              Hono app, exports `AppType`
     routes/search.ts      GET  /api/search?q=
     routes/papers.ts      GET/POST/DELETE /api/papers, GET /api/papers/:id
     routes/upload.ts      POST /api/papers/upload (multipart PDF)
     routes/summary.ts     POST /api/papers/:id/summarize
-    routes/chat.ts        POST /api/papers/:id/chat (streamed), GET history
+    routes/qa.ts          POST /api/papers/:id/qa (streamed), GET history
     db/schema.ts, db/client.ts, db/migrations/
     services/semanticScholar.ts, pdf.ts, llm.ts
   web/src/
@@ -37,14 +37,14 @@ hw/
 
 ## Data model (Drizzle)
 - `papers`: id, title, authors (JSON string[]), year (nullable), abstract (nullable), url (nullable), externalId (nullable, unique; S2 paperId), source ('search'|'upload'), pdfPath (nullable), fullText (nullable), summary (nullable), createdAt.
-- `messages`: id, paperId (FK, cascade), role ('user'|'assistant'), content, createdAt.
+- `qa_messages`: id, paperId (FK, cascade), role ('user'|'assistant'), content, createdAt.
 
 ## Feature plans
 1. **Search**: server calls Semantic Scholar with `fields=title,authors,year,abstract,url,openAccessPdf,externalIds`; Zod-parse response (abstract/year/url nullable); return normalized `SearchResult[]`. Handle 429 with clear error and one retry.
 2. **Save/persist**: "Save" POSTs the result to `/api/papers`; dedupe on `externalId`. Library page loads from DB, so data survives reload.
 3. **PDF upload**: multipart upload (size cap ~25MB, `application/pdf` check) → store file → extract text with `unpdf` → read embedded metadata → if title/authors missing or implausible, send first ~2 pages of text to the LLM asking for JSON `{title, authors, year, abstract}`, validated with Zod (one retry on invalid JSON) → insert paper with `fullText`. If open-access search results include a PDF URL, optionally allow "download PDF" later (out of scope initially).
 4. **Summarize**: `POST /summarize` sends full text (or abstract if no full text) to Claude with a structured summary prompt (problem, method, results, limitations); cache in `papers.summary`. Truncate/chunk text over the context budget. Papers saved from search without a PDF summarize from the abstract only, and the UI says so.
-5. **Q&A**: chat endpoint sends paper text + last N messages + question, streams the response (SSE) to the UI, persists both messages. System prompt: answer only from the paper, say when unsure.
+5. **Q&A**: qa endpoint sends paper text + last N messages + question, streams the response (SSE) to the UI, persists both messages. System prompt: answer only from the paper, say when unsure.
 
 ## Cross-cutting
 - Env validation with Zod at startup (fail fast on missing `ANTHROPIC_API_KEY`).
@@ -58,7 +58,7 @@ hw/
 3. Semantic Scholar search + frontend Search/Library pages (end-to-end save/persist).
 4. PDF upload + metadata extraction.
 5. Summarization.
-6. Q&A chat with streaming.
+6. Q&A with streaming.
 7. Polish: error handling, tests, README.
 
 ## Verification

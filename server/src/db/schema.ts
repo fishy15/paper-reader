@@ -1,22 +1,31 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const papers = sqliteTable("papers", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  title: text("title").notNull(),
-  authors: text("authors", { mode: "json" }).$type<string[]>().notNull(),
-  year: integer("year"),
-  abstract: text("abstract"),
-  url: text("url"),
-  externalId: text("external_id").unique(),
-  source: text("source", { enum: ["search", "upload"] }).notNull(),
-  pdfPath: text("pdf_path"),
-  fullText: text("full_text"),
-  summary: text("summary"),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-});
+export const papers = sqliteTable(
+  "papers",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    title: text("title").notNull(),
+    authors: text("authors", { mode: "json" }).$type<string[]>().notNull(),
+    year: integer("year"),
+    abstract: text("abstract"),
+    url: text("url"),
+    externalId: text("external_id").unique(),
+    source: text("source", { enum: ["search", "upload"] }).notNull(),
+    pdfPath: text("pdf_path"),
+    fullText: text("full_text"),
+    summary: text("summary"),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (t) => [
+    check(
+      "source_external_id",
+      sql`(${t.source} = 'search') = (${t.externalId} IS NOT NULL)`,
+    ),
+  ],
+);
 
-export const messages = sqliteTable("messages", {
+export const qaMessages = sqliteTable("qa_messages", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   paperId: integer("paper_id")
     .notNull()

@@ -15,30 +15,32 @@ export const SearchResult = PaperMetadata.extend({
 });
 export type SearchResult = z.infer<typeof SearchResult>;
 
-export const PaperSource = z.enum(["search", "upload"]);
-export type PaperSource = z.infer<typeof PaperSource>;
-
-export const Paper = PaperMetadata.extend({
+const PaperBase = PaperMetadata.extend({
   id: z.number().int(),
-  externalId: z.string().nullable(),
-  source: PaperSource,
   hasPdf: z.boolean(),
   summary: z.string().nullable(),
   createdAt: z.string(),
 });
+
+/** A saved paper. Only search results carry an external (Semantic Scholar) ID. */
+export const Paper = z.discriminatedUnion("source", [
+  PaperBase.extend({ source: z.literal("search"), externalId: z.string() }),
+  PaperBase.extend({ source: z.literal("upload") }),
+]);
 export type Paper = z.infer<typeof Paper>;
+export type PaperSource = Paper["source"];
 
 export const SavePaperInput = SearchResult;
 export type SavePaperInput = z.infer<typeof SavePaperInput>;
 
-export const ChatMessage = z.object({
+export const QaMessage = z.object({
   id: z.number().int(),
   paperId: z.number().int(),
   role: z.enum(["user", "assistant"]),
   content: z.string(),
   createdAt: z.string(),
 });
-export type ChatMessage = z.infer<typeof ChatMessage>;
+export type QaMessage = z.infer<typeof QaMessage>;
 
-export const ChatInput = z.object({ question: z.string().min(1).max(4000) });
-export type ChatInput = z.infer<typeof ChatInput>;
+export const QaInput = z.object({ question: z.string().min(1).max(4000) });
+export type QaInput = z.infer<typeof QaInput>;
