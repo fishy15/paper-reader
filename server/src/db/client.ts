@@ -9,9 +9,12 @@ export type Db = BetterSQLite3Database<typeof schema>;
 
 const MIGRATIONS_DIR = path.resolve(import.meta.dirname, "../../drizzle");
 
-/** Opens (and migrates) a SQLite database. Pass ":memory:" for tests. */
+/** SQLite's special filename for a private, non-persistent database. */
+export const IN_MEMORY_DB = ":memory:";
+
+/** Opens (and migrates) a SQLite database. Pass IN_MEMORY_DB for tests. */
 export function createDb(file: string): Db {
-  if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (file !== IN_MEMORY_DB) fs.mkdirSync(path.dirname(file), { recursive: true });
   const sqlite = new Database(file);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
