@@ -19,7 +19,7 @@ describe("papers routes", () => {
   });
 
   const post = (body: unknown) =>
-    app.request("/api/papers", {
+    app.request("/api/papers/from-search", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),

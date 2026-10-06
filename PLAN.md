@@ -22,7 +22,7 @@ hw/
   server/src/
     index.ts              Hono app, exports `AppType`
     routes/search.ts      GET  /api/search?q=
-    routes/papers.ts      GET/POST/DELETE /api/papers, GET /api/papers/:id
+    routes/papers.ts      GET /api/papers, GET/DELETE /api/papers/:id, POST /api/papers/from-search
     routes/upload.ts      POST /api/papers/upload (multipart PDF)
     routes/summary.ts     POST /api/papers/:id/summarize
     routes/qa.ts          POST /api/papers/:id/qa (streamed), GET history
@@ -41,7 +41,7 @@ hw/
 
 ## Feature plans
 1. **Search**: server calls Semantic Scholar with `fields=title,authors,year,abstract,url,openAccessPdf,externalIds`; Zod-parse response (abstract/year/url nullable); return normalized `SearchResult[]`. Handle 429 with clear error and one retry.
-2. **Save/persist**: "Save" POSTs the result to `/api/papers`; dedupe on `externalId`. Library page loads from DB, so data survives reload.
+2. **Save/persist**: "Save" POSTs the result to `/api/papers/from-search`; dedupe on `externalId`. Library page loads from DB, so data survives reload.
 3. **PDF upload**: multipart upload (size cap ~25MB, `application/pdf` check) → store file → extract text with `unpdf` → read embedded metadata → if title/authors missing or implausible, send first ~2 pages of text to the LLM asking for JSON `{title, authors, year, abstract}`, validated with Zod (one retry on invalid JSON) → insert paper with `fullText`. If open-access search results include a PDF URL, optionally allow "download PDF" later (out of scope initially).
 4. **Summarize**: `POST /summarize` sends full text (or abstract if no full text) to Claude with a structured summary prompt (problem, method, results, limitations); cache in `papers.summary`. Truncate/chunk text over the context budget. Papers saved from search without a PDF summarize from the abstract only, and the UI says so.
 5. **Q&A**: qa endpoint sends paper text + last N messages + question, streams the response (SSE) to the UI, persists both messages. System prompt: answer only from the paper, say when unsure.

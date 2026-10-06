@@ -31,7 +31,7 @@ export function papersRoutes(db: Db) {
       const rows = db.select().from(papers).orderBy(papers.id).all();
       return c.json(rows.map(toPaper));
     })
-    .post("/", zValidator("json", SavePaperInput), (c) => {
+    .post("/from-search", zValidator("json", SavePaperInput), (c) => {
       const input = c.req.valid("json");
       const existing = db
         .select()
