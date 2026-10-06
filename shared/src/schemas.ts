@@ -17,6 +17,7 @@ export type SearchResult = z.infer<typeof SearchResult>;
 
 const PaperBase = PaperMetadata.extend({
   id: z.number().int(),
+  pdfUrl: z.url().nullable(),
   hasPdf: z.boolean(),
   summary: z.string().nullable(),
   createdAt: z.string(),

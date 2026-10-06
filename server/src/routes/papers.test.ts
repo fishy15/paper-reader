@@ -9,7 +9,7 @@ const sample = {
   abstract: null,
   url: "https://example.com/paper",
   externalId: "abc123",
-  pdfUrl: null,
+  pdfUrl: "https://example.com/paper.pdf",
 };
 
 describe("papers routes", () => {
@@ -28,8 +28,10 @@ describe("papers routes", () => {
   it("saves, lists, fetches and deletes a paper", async () => {
     const created = await post(sample);
     expect(created.status).toBe(201);
-    const paper = (await created.json()) as { id: number; title: string };
+    const paper = (await created.json()) as { id: number; title: string; url: string; pdfUrl: string };
     expect(paper.title).toBe(sample.title);
+    expect(paper.url).toBe(sample.url);
+    expect(paper.pdfUrl).toBe(sample.pdfUrl);
 
     const list = (await (await app.request("/api/papers")).json()) as unknown[];
     expect(list).toHaveLength(1);

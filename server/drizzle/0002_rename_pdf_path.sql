@@ -1,0 +1,1 @@
+ALTER TABLE `papers` RENAME COLUMN `pdf_path` TO `local_pdf_path`;

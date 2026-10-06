@@ -1,0 +1,1 @@
+ALTER TABLE `papers` ADD `pdf_url` text;

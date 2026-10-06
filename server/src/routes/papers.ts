@@ -14,7 +14,8 @@ export function toPaper(row: PaperRow): Paper {
     year: row.year,
     abstract: row.abstract,
     url: row.url,
-    hasPdf: row.pdfPath !== null,
+    pdfUrl: row.pdfUrl,
+    hasPdf: row.localPdfPath !== null,
     summary: row.summary,
     createdAt: row.createdAt,
   };
@@ -46,7 +47,8 @@ export function papersRoutes(db: Db) {
           authors: input.authors,
           year: input.year,
           abstract: input.abstract,
-          url: input.url ?? input.pdfUrl,
+          url: input.url,
+          pdfUrl: input.pdfUrl,
           externalId: input.externalId,
           source: "search",
         })

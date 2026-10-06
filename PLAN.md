@@ -36,7 +36,7 @@ hw/
 ```
 
 ## Data model (Drizzle)
-- `papers`: id, title, authors (JSON string[]), year (nullable), abstract (nullable), url (nullable), externalId (nullable, unique; S2 paperId), source ('search'|'upload'), pdfPath (nullable), fullText (nullable), summary (nullable), createdAt.
+- `papers`: id, title, authors (JSON string[]), year (nullable), abstract (nullable), url (nullable), externalId (nullable, unique; S2 paperId), source ('search'|'upload'), pdfUrl (nullable), localPdfPath (nullable), fullText (nullable), summary (nullable), createdAt.
 - `qa_messages`: id, paperId (FK, cascade), role ('user'|'assistant'), content, createdAt.
 
 ## Feature plans
