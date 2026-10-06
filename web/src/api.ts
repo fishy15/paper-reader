@@ -14,8 +14,8 @@ async function errorMessage(res: { status: number; json(): Promise<unknown> }): 
   return body.success ? body.data.error : `Request failed (${res.status})`;
 }
 
-export async function searchPapers(q: string) {
-  const res = await client.api.search.$get({ query: { q } });
+export async function searchPapers(query: string) {
+  const res = await client.api.search.$get({ query: { query } });
   if (!res.ok) throw new ApiError(await errorMessage(res));
   return res.json();
 }

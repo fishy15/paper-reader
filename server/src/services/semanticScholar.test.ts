@@ -86,24 +86,24 @@ describe("semantic scholar provider", () => {
 });
 
 describe("search route", () => {
-  const makeApp = (search: (q: string, limit: number) => Promise<never[]>) =>
+  const makeApp = (search: (query: string, limit: number) => Promise<never[]>) =>
     createApp({ db: createDb(IN_MEMORY_DB), searchProvider: { search } });
 
   it("passes the query to the provider and validates input", async () => {
     const search = vi.fn(async () => []);
     const app = makeApp(search);
-    expect((await app.request("/api/search?q=attention")).status).toBe(200);
+    expect((await app.request("/api/search?query=attention")).status).toBe(200);
     expect(search).toHaveBeenCalledWith("attention", 20);
-    expect((await app.request("/api/search?q=")).status).toBe(400);
+    expect((await app.request("/api/search?query=")).status).toBe(400);
     expect((await app.request("/api/search")).status).toBe(400);
-    expect((await app.request("/api/search?q=a&limit=500")).status).toBe(400);
+    expect((await app.request("/api/search?query=a&limit=500")).status).toBe(400);
   });
 
   it("maps provider errors to their status", async () => {
     const app = makeApp(async () => {
       throw new SearchProviderError("slow down", 429);
     });
-    const res = await app.request("/api/search?q=x");
+    const res = await app.request("/api/search?query=x");
     expect(res.status).toBe(429);
     expect(await res.json()).toEqual({ error: "slow down" });
   });

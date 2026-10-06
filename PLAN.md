@@ -21,7 +21,7 @@ hw/
   shared/src/schemas.ts   Zod schemas + inferred types: Paper, SearchResult, QaMessage
   server/src/
     index.ts              Hono app, exports `AppType`
-    routes/search.ts      GET  /api/search?q=
+    routes/search.ts      GET  /api/search?query=
     routes/papers.ts      GET /api/papers, GET/DELETE /api/papers/:id, POST /api/papers/from-search
     routes/upload.ts      POST /api/papers/upload (multipart PDF)
     routes/summary.ts     POST /api/papers/:id/summarize
