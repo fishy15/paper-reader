@@ -1,0 +1,25 @@
+{
+  "name": "@paper-reader/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.3"
+  },
+  "dependencies": {
+    "@paper-reader/server": "*",
+    "@paper-reader/shared": "*",
+    "@tanstack/react-query": "^5.104.1",
+    "hono": "^4.13.13",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^8.4.0"
+  }
+}

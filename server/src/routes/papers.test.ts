@@ -15,7 +15,10 @@ const sample = {
 describe("papers routes", () => {
   let app: ReturnType<typeof createApp>;
   beforeEach(() => {
-    app = createApp(createDb(IN_MEMORY_DB));
+    app = createApp({
+      db: createDb(IN_MEMORY_DB),
+      searchProvider: { search: async () => [] },
+    });
   });
 
   const post = (body: unknown) =>
