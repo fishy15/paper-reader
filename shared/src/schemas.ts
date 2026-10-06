@@ -5,13 +5,13 @@ export const PaperMetadata = z.object({
   authors: z.array(z.string()),
   year: z.number().int().nullable(),
   abstract: z.string().nullable(),
-  url: z.string().url().nullable(),
+  url: z.url().nullable(),
 });
 export type PaperMetadata = z.infer<typeof PaperMetadata>;
 
 export const SearchResult = PaperMetadata.extend({
   externalId: z.string(),
-  pdfUrl: z.string().url().nullable(),
+  pdfUrl: z.url().nullable(),
 });
 export type SearchResult = z.infer<typeof SearchResult>;
 
