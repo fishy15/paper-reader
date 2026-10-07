@@ -1,12 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { listPapers, savePaper, searchPapers } from "../api.js";
+import { searchPapers } from "../api.js";
 import { PaperCard } from "../components/PaperCard.js";
+import { usePapers, useSavePaper } from "../queries.js";
 
 export function Search() {
   const [input, setInput] = useState("");
   const [submitted, setSubmitted] = useState("");
-  const queryClient = useQueryClient();
 
   const results = useQuery({
     queryKey: ["search", submitted],
@@ -14,11 +14,8 @@ export function Search() {
     enabled: submitted !== "",
     retry: false,
   });
-  const library = useQuery({ queryKey: ["papers"], queryFn: listPapers });
-  const save = useMutation({
-    mutationFn: savePaper,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["papers"] }),
-  });
+  const library = usePapers();
+  const save = useSavePaper();
 
   const savedIds = new Set(
     (library.data ?? []).flatMap((p) => (p.source === "search" ? [p.externalId] : [])),

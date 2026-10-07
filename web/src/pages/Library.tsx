@@ -1,15 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deletePaper, listPapers } from "../api.js";
 import { PaperCard } from "../components/PaperCard.js";
 import { UploadBox } from "../components/UploadBox.js";
+import { useDeletePaper, usePapers } from "../queries.js";
 
 export function Library() {
-  const queryClient = useQueryClient();
-  const papers = useQuery({ queryKey: ["papers"], queryFn: listPapers });
-  const remove = useMutation({
-    mutationFn: deletePaper,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["papers"] }),
-  });
+  const papers = usePapers();
+  const remove = useDeletePaper();
 
   return (
     <section>

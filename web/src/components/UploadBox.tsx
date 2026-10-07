@@ -1,15 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { uploadPaper } from "../api.js";
+import { useUploadPaper } from "../queries.js";
 
 export function UploadBox() {
-  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const upload = useMutation({
-    mutationFn: uploadPaper,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["papers"] }),
-  });
+  const upload = useUploadPaper();
 
   function pick(files: FileList | null) {
     const file = files?.[0];
