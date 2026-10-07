@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { Paper } from "@paper-reader/shared";
 import type { Llm } from "../services/llm.js";
-import { makePdf, makeTestApp } from "../test-utils.js";
+import { fakeLlm, makePdf, makeTestApp } from "../test-utils.js";
 import { MAX_PDF_BYTES } from "./upload.js";
 
 type App = ReturnType<typeof makeTestApp>["app"];
@@ -22,7 +22,7 @@ describe("PDF upload", () => {
       year: 2021,
       abstract: "We do things.",
     }));
-    const { app, deps } = makeTestApp({ llm: { extractMetadata } });
+    const { app, deps } = makeTestApp({ llm: fakeLlm({ extractMetadata }) });
 
     const res = await upload(app, makePdf(["Page one text", "Page two text", "Page three text"]));
     expect(res.status).toBe(201);
@@ -62,7 +62,7 @@ describe("PDF upload", () => {
 
   it("falls back to the filename and drops implausible values from the LLM", async () => {
     const { app } = makeTestApp({
-      llm: { extractMetadata: async () => ({ title: " ", authors: [], year: 20217, abstract: "  " }) },
+      llm: fakeLlm({ extractMetadata: async () => ({ title: " ", authors: [], year: 20217, abstract: "  " }) }),
     });
     const paper = (await (await upload(app, makePdf(["x"]), "my-notes.pdf")).json()) as Paper;
     expect(paper).toMatchObject({ title: "my-notes", year: null, abstract: null, authors: [] });
@@ -104,11 +104,11 @@ describe("PDF upload", () => {
   it("stores nothing when metadata extraction fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { app, deps } = makeTestApp({
-      llm: {
+      llm: fakeLlm({
         extractMetadata: async () => {
           throw new Error("Gemini declined to process this paper (SAFETY)");
         },
-      },
+      }),
     });
     const res = await upload(app, makePdf(["Some text"]));
     expect(res.status).toBe(500);

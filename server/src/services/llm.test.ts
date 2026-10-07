@@ -30,26 +30,41 @@ describe("gemini llm", () => {
     });
   });
 
+  it("sends the title and text as plain text and returns the trimmed summary", async () => {
+    const { client, generateContent } = fakeClient(async () => ({ text: "  Problem: x\n" }));
+
+    expect(await makeLlm(client).summarize({ title: "A Paper", text: "Full body" })).toBe("Problem: x");
+    const params = generateContent.mock.calls[0]![0];
+    expect(params.contents).toContain("Title: A Paper");
+    expect(params.contents).toContain("<paper_text>\nFull body\n</paper_text>");
+    expect(params.config?.responseMimeType).toBeUndefined();
+  });
+
   it("waits for the rate limiter before every request", async () => {
     const order: string[] = [];
     const { client } = fakeClient(async () => {
       order.push("request");
       return { text: JSON.stringify(metadata) };
     });
-    await makeLlm(client, async () => void order.push("acquire")).extractMetadata("x");
-    expect(order).toEqual(["acquire", "request"]);
+    const llm = makeLlm(client, async () => void order.push("acquire"));
+    await llm.extractMetadata("x");
+    await llm.summarize({ title: "t", text: "x" });
+    expect(order).toEqual(["acquire", "request", "acquire", "request"]);
   });
 
   it("fails with a helpful message when no API key is configured", async () => {
     const llm = createLlm({ model: "m", requestsPerMinute: 5, acquire: async () => {} });
     await expect(llm.extractMetadata("x")).rejects.toThrow(/GEMINI_API_KEY is not set/);
+    await expect(llm.summarize({ title: "t", text: "x" })).rejects.toThrow(/GEMINI_API_KEY is not set/);
   });
 
   it("maps HTTP 429 to a rate limit error", async () => {
     const { client } = fakeClient(async () => {
       throw new ApiError({ message: "quota exceeded", status: 429 });
     });
-    await expect(makeLlm(client).extractMetadata("x")).rejects.toBeInstanceOf(LlmRateLimitError);
+    const llm = makeLlm(client);
+    await expect(llm.extractMetadata("x")).rejects.toBeInstanceOf(LlmRateLimitError);
+    await expect(llm.summarize({ title: "t", text: "x" })).rejects.toBeInstanceOf(LlmRateLimitError);
   });
 
   it("reports blocked prompts, empty responses, bad JSON and schema mismatches", async () => {

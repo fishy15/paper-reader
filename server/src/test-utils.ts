@@ -4,6 +4,21 @@ import path from "node:path";
 import { onTestFinished } from "vitest";
 import { createApp, type AppDeps } from "./app.js";
 import { createDb, IN_MEMORY_DB } from "./db/client.js";
+import type { Llm } from "./services/llm.js";
+
+/** An LLM that returns canned answers; override only the methods a test cares about. */
+export function fakeLlm(overrides: Partial<Llm> = {}): Llm {
+  return {
+    extractMetadata: async () => ({
+      title: "Fake Title",
+      authors: ["A. Author", "B. Author"],
+      year: 2020,
+      abstract: "Fake abstract.",
+    }),
+    summarize: async () => "Fake summary.",
+    ...overrides,
+  };
+}
 
 /** Builds an app backed by an in-memory DB, a temp data dir and fake search/LLM services. */
 export function makeTestApp(overrides: Partial<AppDeps> = {}) {
@@ -12,14 +27,7 @@ export function makeTestApp(overrides: Partial<AppDeps> = {}) {
   const deps: AppDeps = {
     db: createDb(IN_MEMORY_DB),
     searchProvider: { search: async () => [] },
-    llm: {
-      extractMetadata: async () => ({
-        title: "Fake Title",
-        authors: ["A. Author", "B. Author"],
-        year: 2020,
-        abstract: "Fake abstract.",
-      }),
-    },
+    llm: fakeLlm(),
     dataDir,
     ...overrides,
   };
