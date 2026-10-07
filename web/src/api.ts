@@ -42,3 +42,15 @@ export async function deletePaper(id: number) {
   const res = await client.api.papers[":id"].$delete({ param: { id: String(id) } });
   if (!res.ok) throw new ApiError(await errorMessage(res));
 }
+
+export async function getPaper(id: number) {
+  const res = await client.api.papers[":id"].$get({ param: { id: String(id) } });
+  if (!res.ok) throw new ApiError(await errorMessage(res));
+  return res.json();
+}
+
+export async function summarizePaper(id: number) {
+  const res = await client.api.papers[":id"].summarize.$post({ param: { id: String(id) } });
+  if (!res.ok) throw new ApiError(await errorMessage(res));
+  return res.json();
+}

@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { PaperCard } from "../components/PaperCard.js";
 import { UploadBox } from "../components/UploadBox.js";
 import { useDeletePaper, usePapers } from "../queries.js";
@@ -17,6 +18,7 @@ export function Library() {
       )}
       {papers.data?.map((paper) => (
         <PaperCard key={paper.id} paper={paper} badge={paper.source === "upload" ? "uploaded" : undefined}>
+          <Link to={`/papers/${paper.id}`}>Open</Link>
           <button
             className="danger"
             disabled={remove.isPending}

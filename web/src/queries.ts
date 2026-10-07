@@ -1,10 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deletePaper, listPapers, savePaper, uploadPaper } from "./api.js";
+import { deletePaper, getPaper, listPapers, savePaper, summarizePaper, uploadPaper } from "./api.js";
 
 const PAPERS_KEY = ["papers"] as const;
 
 export function usePapers() {
   return useQuery({ queryKey: PAPERS_KEY, queryFn: listPapers });
+}
+
+export function usePaper(id: number) {
+  // No retries: the server is local, so a failure (usually 404) won't fix itself and retrying only delays the error.
+  return useQuery({ queryKey: [...PAPERS_KEY, id], queryFn: () => getPaper(id), retry: false });
 }
 
 /** Mutations that change the saved papers refresh the library list on success. */
@@ -18,4 +23,15 @@ function usePapersMutation<TVariables>(mutationFn: (variables: TVariables) => Pr
 
 export const useSavePaper = () => usePapersMutation(savePaper);
 export const useUploadPaper = () => usePapersMutation(uploadPaper);
-export const useDeletePaper = () => usePapersMutation(deletePaper);
+export function useDeletePaper() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deletePaper,
+    onSuccess: (_, id) => {
+      // Drop the deleted paper's cached detail so Back doesn't flash it before the 404.
+      queryClient.removeQueries({ queryKey: [...PAPERS_KEY, id] });
+      return queryClient.invalidateQueries({ queryKey: PAPERS_KEY });
+    },
+  });
+}
+export const useSummarizePaper = () => usePapersMutation(summarizePaper);
