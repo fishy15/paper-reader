@@ -12,6 +12,6 @@ const app = createApp({
   searchProvider: createSemanticScholarProvider({ apiKey: env.S2_API_KEY }),
 });
 
-serve({ fetch: app.fetch, port: env.PORT }, (info) => {
-  console.log(`Server listening on http://localhost:${info.port}`);
+serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
+  console.log(`Server listening on http://${info.address}:${info.port}`);
 });

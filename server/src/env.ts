@@ -3,6 +3,8 @@ import { z } from "zod";
 
 const Env = z.object({
   PORT: z.coerce.number().int().default(3000),
+  // The API has no authentication, so only accept connections from this machine.
+  HOST: z.string().default("127.0.0.1"),
   DATA_DIR: z.string().default(path.resolve(import.meta.dirname, "../../data")),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-sonnet-5-5"),
