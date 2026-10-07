@@ -12,8 +12,9 @@ export interface AppDeps {
 export function createApp({ db, searchProvider }: AppDeps) {
   return new Hono()
     .onError((err, c) => {
+      // Single-user local tool: surface the real error message instead of hiding it.
       console.error(err);
-      return c.json({ error: "Internal server error" }, 500);
+      return c.json({ error: err.message }, 500);
     })
     .route("/api/papers", papersRoutes(db))
     .route("/api/search", searchRoutes(searchProvider));
