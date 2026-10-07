@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "../app.js";
-import { createDb, IN_MEMORY_DB } from "../db/client.js";
+import { makeTestApp } from "../test-utils.js";
 import { createSemanticScholarProvider, SearchProviderError } from "./semanticScholar.js";
 
 const json = (body: unknown, status = 200) =>
@@ -87,7 +86,7 @@ describe("semantic scholar provider", () => {
 
 describe("search route", () => {
   const makeApp = (search: (query: string, limit: number) => Promise<never[]>) =>
-    createApp({ db: createDb(IN_MEMORY_DB), searchProvider: { search } });
+    makeTestApp({ searchProvider: { search } }).app;
 
   it("passes the query to the provider and validates input", async () => {
     const search = vi.fn(async () => []);

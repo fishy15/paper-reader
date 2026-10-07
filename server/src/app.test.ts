@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { createApp } from "./app.js";
-import { createDb, IN_MEMORY_DB } from "./db/client.js";
+import { makeTestApp } from "./test-utils.js";
 
 function makeApp(search: () => Promise<never[]> = async () => []) {
-  return createApp({ db: createDb(IN_MEMORY_DB), searchProvider: { search } });
+  return makeTestApp({ searchProvider: { search } }).app;
 }
 
 describe("error handling", () => {

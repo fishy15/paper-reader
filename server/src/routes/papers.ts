@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -26,7 +28,7 @@ export function toPaper(row: PaperRow): Paper {
 
 const IdParam = z.object({ id: z.coerce.number().int().positive() });
 
-export function papersRoutes(db: Db) {
+export function papersRoutes(db: Db, dataDir: string) {
   return new Hono()
     .get("/", (c) => {
       const rows = db.select().from(papers).orderBy(papers.id).all();
@@ -62,10 +64,11 @@ export function papersRoutes(db: Db) {
       if (!row) return c.json({ error: "Paper not found" }, 404);
       return c.json(toPaper(row), 200);
     })
-    .delete("/:id", zValidator("param", IdParam), (c) => {
+    .delete("/:id", zValidator("param", IdParam), async (c) => {
       const { id } = c.req.valid("param");
       const deleted = db.delete(papers).where(eq(papers.id, id)).returning().get();
       if (!deleted) return c.json({ error: "Paper not found" }, 404);
+      if (deleted.localPdfPath) await fs.rm(path.join(dataDir, deleted.localPdfPath), { force: true });
       return c.json({ ok: true as const }, 200);
     });
 }

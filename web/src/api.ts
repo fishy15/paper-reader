@@ -32,6 +32,12 @@ export async function savePaper(result: SearchResult) {
   return res.json();
 }
 
+export async function uploadPaper(file: File) {
+  const res = await client.api.papers.upload.$post({ form: { file } });
+  if (!res.ok) throw new ApiError(await errorMessage(res));
+  return res.json();
+}
+
 export async function deletePaper(id: number) {
   const res = await client.api.papers[":id"].$delete({ param: { id: String(id) } });
   if (!res.ok) throw new ApiError(await errorMessage(res));

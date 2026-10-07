@@ -40,3 +40,6 @@ button.danger { color: var(--danger); }
 .actions { display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem; }
 .actions a { color: var(--accent); }
 .error { color: var(--danger); }
+.dropzone { border: 2px dashed var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; text-align: center; }
+.dropzone.dragging { border-color: var(--accent); }
+.dropzone p { margin: 0.25rem 0; }

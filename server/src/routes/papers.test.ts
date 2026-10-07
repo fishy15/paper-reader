@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createApp } from "../app.js";
-import { createDb, IN_MEMORY_DB } from "../db/client.js";
+import { makeTestApp } from "../test-utils.js";
 
 const sample = {
   title: "Attention Is All You Need",
@@ -13,12 +12,9 @@ const sample = {
 };
 
 describe("papers routes", () => {
-  let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof makeTestApp>["app"];
   beforeEach(() => {
-    app = createApp({
-      db: createDb(IN_MEMORY_DB),
-      searchProvider: { search: async () => [] },
-    });
+    app = makeTestApp().app;
   });
 
   const post = (body: unknown) =>

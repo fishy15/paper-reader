@@ -6,8 +6,10 @@ const Env = z.object({
   // The API has no authentication, so only accept connections from this machine.
   HOST: z.string().default("127.0.0.1"),
   DATA_DIR: z.string().default(path.resolve(import.meta.dirname, "../../data")),
-  ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default("claude-sonnet-5-5"),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default("gemini-3.5-flash-lite"),
+  // Google doesn't publish fixed free-tier limits; check yours in AI Studio and raise this if allowed.
+  GEMINI_RPM: z.coerce.number().positive().default(5),
   S2_API_KEY: z.string().optional(),
 });
 export type Env = z.infer<typeof Env>;
