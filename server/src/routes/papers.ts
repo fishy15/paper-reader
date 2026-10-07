@@ -26,7 +26,7 @@ export function toPaper(row: PaperRow): Paper {
   return { ...base, source: "search", externalId: row.externalId };
 }
 
-const IdParam = z.object({ id: z.coerce.number().int().positive() });
+export const IdParam = z.object({ id: z.coerce.number().int().positive() });
 
 export function papersRoutes(db: Db, dataDir: string) {
   return new Hono()

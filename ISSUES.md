@@ -39,3 +39,16 @@ already displayed in the UI.
   limits; a 429 from Gemini is shown to the user. Check your real limits in AI Studio.
 - **Blocked or declined requests fail the upload.** If Gemini blocks a paper, the upload errors
   with the block reason.
+
+## Summaries
+
+- **Search-saved papers are summarized from their `pdfUrl`.** The server downloads it on the
+  first summarize request and stores the text. Links that lead to a web page instead of a PDF
+  fail with an error, and the paper has to be uploaded manually. The downloaded PDF itself is
+  not kept (only its text), so it still can't be opened from the UI.
+- **The download follows the stored `pdfUrl` as-is.** Only http(s) is allowed, but nothing blocks
+  private or localhost addresses. The URL comes from the client at save time, which is accepted
+  for a single-user local tool.
+- **Long papers are truncated, not chunked.** Text over 400,000 characters is cut and marked
+  `[Text truncated]` for the model; the UI is not told.
+- **A Gemini rate limit during an upload is shown as a 500,** unlike summaries, which return 429.
