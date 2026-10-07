@@ -25,14 +25,24 @@ const S2Paper = z.object({
   url: z.string().nullish(),
   authors: z.array(z.object({ name: z.string().nullish() })).default([]),
   openAccessPdf: z.object({ url: z.string().nullish() }).nullish(),
+  // Other id values (e.g. CorpusId) are numbers; only the arXiv id is used.
+  externalIds: z.object({ ArXiv: z.string().nullish() }).nullish(),
 });
 const S2Response = z.object({ data: z.array(S2Paper).default([]) });
 
-const FIELDS = "title,authors,year,abstract,url,openAccessPdf";
+const FIELDS = "title,authors,year,abstract,url,openAccessPdf,externalIds";
 const BASE_URL = "https://api.semanticscholar.org/graph/v1/paper/search";
 
 function validUrl(raw: string | null | undefined): string | null {
   return raw && URL.canParse(raw) ? raw : null;
+}
+
+/** S2 often has no `openAccessPdf` for papers that are on arXiv, whose PDF URLs are predictable. */
+function pdfUrlFor(paper: z.infer<typeof S2Paper>): string | null {
+  const openAccess = validUrl(paper.openAccessPdf?.url);
+  if (openAccess) return openAccess;
+  const arxivId = paper.externalIds?.ArXiv?.trim();
+  return arxivId ? validUrl(`https://arxiv.org/pdf/${arxivId}`) : null;
 }
 
 function toSearchResult(paper: z.infer<typeof S2Paper>): SearchResult | null {
@@ -45,7 +55,7 @@ function toSearchResult(paper: z.infer<typeof S2Paper>): SearchResult | null {
     year: paper.year ?? null,
     abstract: paper.abstract?.trim() || null,
     url: validUrl(paper.url),
-    pdfUrl: validUrl(paper.openAccessPdf?.url),
+    pdfUrl: pdfUrlFor(paper),
   };
 }
 

@@ -20,6 +20,21 @@ const fixture = {
     { paperId: "p2", title: "No metadata", abstract: null, year: null, url: null, authors: [], openAccessPdf: null },
     { paperId: "p3", title: null, authors: [] },
     { paperId: "p4", title: "Bad links", url: "not a url", authors: [], openAccessPdf: { url: "" } },
+    {
+      paperId: "p5",
+      title: "arXiv only",
+      authors: [],
+      openAccessPdf: null,
+      externalIds: { ArXiv: "1706.03762", CorpusId: 13756489, DOI: "10.1/x" },
+    },
+    {
+      paperId: "p6",
+      title: "Open access wins over arXiv",
+      authors: [],
+      openAccessPdf: { url: "https://example.org/paper.pdf" },
+      externalIds: { ArXiv: "1706.03762" },
+    },
+    { paperId: "p7", title: "No arXiv id", authors: [], externalIds: { CorpusId: 1 } },
   ],
 };
 
@@ -29,7 +44,7 @@ describe("semantic scholar provider", () => {
     const provider = createSemanticScholarProvider({ fetchFn });
     const results = await provider.search("attention", 10);
 
-    expect(results.map((r) => r.externalId)).toEqual(["p1", "p2", "p4"]);
+    expect(results.map((r) => r.externalId)).toEqual(["p1", "p2", "p4", "p5", "p6", "p7"]);
     expect(results[0]).toEqual({
       externalId: "p1",
       title: "Attention Is All You Need",
@@ -41,6 +56,14 @@ describe("semantic scholar provider", () => {
     });
     expect(results[1]).toMatchObject({ year: null, abstract: null, url: null, pdfUrl: null });
     expect(results[2]).toMatchObject({ url: null, pdfUrl: null });
+  });
+
+  it("falls back to the arXiv PDF when S2 has no open access link", async () => {
+    const provider = createSemanticScholarProvider({ fetchFn: async () => json(fixture) });
+    const byId = new Map((await provider.search("x", 10)).map((r) => [r.externalId, r.pdfUrl]));
+    expect(byId.get("p5")).toBe("https://arxiv.org/pdf/1706.03762");
+    expect(byId.get("p6")).toBe("https://example.org/paper.pdf");
+    expect(byId.get("p7")).toBeNull();
   });
 
   it("handles a response with no data field", async () => {
