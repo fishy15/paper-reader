@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Paper } from "@paper-reader/shared";
 import type { Llm } from "../services/llm.js";
 import { fakeLlm, makePdf, makeTestApp } from "../test-utils.js";
-import { MAX_PDF_BYTES } from "./upload.js";
+import { MAX_PDF_BYTES } from "../services/pdf.js";
 
 type App = ReturnType<typeof makeTestApp>["app"];
 

@@ -8,10 +8,9 @@ import { z } from "zod";
 import type { Db } from "../db/client.js";
 import { papers } from "../db/schema.js";
 import type { ExtractedMetadata, Llm } from "../services/llm.js";
-import { extractPages, isPdf } from "../services/pdf.js";
+import { extractPages, isPdf, MAX_PDF_BYTES } from "../services/pdf.js";
 import { toPaper } from "./papers.js";
 
-export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 /** Metadata (title, authors, abstract) lives on the first pages; sending more only costs tokens. */
 const METADATA_PAGES = 2;
 const METADATA_MAX_CHARS = 12_000;

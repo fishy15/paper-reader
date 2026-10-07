@@ -2,6 +2,8 @@ import { extractText, getDocumentProxy } from "unpdf";
 
 const PDF_MAGIC = "%PDF-";
 
+export const MAX_PDF_BYTES = 25 * 1024 * 1024;
+
 /** True if the bytes start with the PDF header (the client-reported MIME type is not trusted). */
 export function isPdf(bytes: Uint8Array): boolean {
   return new TextDecoder().decode(bytes.subarray(0, PDF_MAGIC.length)) === PDF_MAGIC;

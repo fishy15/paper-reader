@@ -17,7 +17,6 @@ delete metadataJsonSchema["$schema"];
 
 export interface SummaryInput {
   title: string;
-  /** The paper's full text, or just its abstract when that's all we have. */
   text: string;
 }
 
@@ -45,7 +44,7 @@ Method: the approach, in enough detail to understand how it works.
 Results: the main findings, with concrete numbers where the text gives them.
 Limitations: weaknesses, assumptions or open questions, as stated by the authors or evident from the text.`;
 
-const SUMMARY_SYSTEM_PROMPT = `You summarize research papers for a reader deciding what to study in depth. You are given the paper's title and its text, which may be the full paper or only the abstract.
+const SUMMARY_SYSTEM_PROMPT = `You summarize research papers for a reader deciding what to study in depth. You are given the paper's title and its full text.
 
 ${SUMMARY_FORMAT}
 
