@@ -43,5 +43,13 @@ export const QaMessage = z.object({
 });
 export type QaMessage = z.infer<typeof QaMessage>;
 
-export const QaInput = z.object({ question: z.string().min(1).max(4000) });
+export const QaInput = z.object({ question: z.string().trim().min(1).max(4000) });
 export type QaInput = z.infer<typeof QaInput>;
+
+/** One line of the newline-delimited JSON stream returned when asking a question. */
+export const QaStreamEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("delta"), text: z.string() }),
+  z.object({ type: z.literal("error"), message: z.string() }),
+  z.object({ type: z.literal("done") }),
+]);
+export type QaStreamEvent = z.infer<typeof QaStreamEvent>;

@@ -52,3 +52,11 @@ already displayed in the UI.
 - **Long papers are truncated, not chunked.** Text over 400,000 characters is cut and marked
   `[Text truncated]` for the model; the UI is not told.
 - **A Gemini rate limit during an upload is shown as a 500,** unlike summaries, which return 429.
+
+## Q&A
+
+- **Only complete answers are saved.** If the stream fails or the browser disconnects partway,
+  neither the question nor the partial answer is stored, so retrying asks the question again.
+- **The model sees the last 20 messages.** Older turns stay in the database and on screen but
+  are not sent. The whole paper text (up to 400,000 characters) is sent with every question.
+- **No way to clear a conversation** yet (it is deleted with its paper).

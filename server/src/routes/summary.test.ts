@@ -4,7 +4,7 @@ import type { Paper } from "@paper-reader/shared";
 import { papers } from "../db/schema.js";
 import { LlmRateLimitError, type Llm } from "../services/llm.js";
 import { fakeLlm, makePdf, makeTestApp } from "../test-utils.js";
-import { MAX_SUMMARY_CHARS } from "./summary.js";
+import { MAX_PAPER_CHARS } from "../services/paperText.js";
 
 type TestApp = ReturnType<typeof makeTestApp>;
 
@@ -100,11 +100,11 @@ describe("POST /api/papers/:id/summarize", () => {
   it("truncates very long text and marks the cut", async () => {
     const summarizeFn = vi.fn<Llm["summarize"]>(async () => "ok");
     const { app, deps } = makeTestApp({ llm: fakeLlm({ summarize: summarizeFn }) });
-    const { id } = insertPaper(deps, { fullText: "x".repeat(MAX_SUMMARY_CHARS + 100) });
+    const { id } = insertPaper(deps, { fullText: "x".repeat(MAX_PAPER_CHARS + 100) });
 
     await summarize(app, id);
     const text = summarizeFn.mock.calls[0]![0].text;
-    expect(text).toHaveLength(MAX_SUMMARY_CHARS + "\n\n[Text truncated]".length);
+    expect(text).toHaveLength(MAX_PAPER_CHARS + "\n\n[Text truncated]".length);
     expect(text.endsWith("[Text truncated]")).toBe(true);
   });
 

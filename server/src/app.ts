@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Db } from "./db/client.js";
 import { papersRoutes } from "./routes/papers.js";
+import { qaRoutes } from "./routes/qa.js";
 import { searchRoutes } from "./routes/search.js";
 import { summaryRoutes } from "./routes/summary.js";
 import { uploadRoutes } from "./routes/upload.js";
@@ -25,6 +26,7 @@ export function createApp({ db, searchProvider, llm, dataDir }: AppDeps) {
     .route("/api/papers", papersRoutes(db, dataDir))
     .route("/api/papers", uploadRoutes({ db, llm, dataDir }))
     .route("/api/papers", summaryRoutes({ db, llm }))
+    .route("/api/papers", qaRoutes({ db, llm }))
     .route("/api/search", searchRoutes(searchProvider));
 }
 
