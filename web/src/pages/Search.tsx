@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { searchPapers } from "../api.js";
 import { PaperCard } from "../components/PaperCard.js";
 import { usePapers, useSavePaper } from "../queries.js";
@@ -21,14 +21,14 @@ export function Search() {
     (library.data ?? []).flatMap((p) => (p.source === "search" ? [p.externalId] : [])),
   );
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: SubmitEvent) {
     e.preventDefault();
     setSubmitted(input.trim());
   }
 
   return (
     <section>
-      <form onSubmit={onSubmit} className="search-form">
+      <form onSubmit={onSubmit} className="inline-form">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}

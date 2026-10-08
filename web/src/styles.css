@@ -27,8 +27,8 @@ main { max-width: 800px; margin: 0 auto; padding: 1rem; }
 .topbar nav { display: flex; gap: 1rem; }
 .topbar a { color: var(--muted); text-decoration: none; }
 .topbar a.active { color: var(--accent); font-weight: 600; }
-.search-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-.search-form input { flex: 1; }
+.inline-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.inline-form input { flex: 1; }
 input, button { font: inherit; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--fg); }
 button { cursor: pointer; }
 button:disabled { cursor: default; opacity: 0.6; }
@@ -45,3 +45,6 @@ button.danger { color: var(--danger); }
 .dropzone p { margin: 0.25rem 0; }
 
 .summary { white-space: pre-wrap; }
+.chat { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.5rem 0 1rem; }
+.message { max-width: 85%; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--card); white-space: pre-wrap; }
+.message.user { align-self: flex-end; border-color: var(--accent); }

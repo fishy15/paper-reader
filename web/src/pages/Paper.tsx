@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router";
+import { Chat } from "../components/Chat.js";
 import { usePaper, useSummarizePaper } from "../queries.js";
 
 export function PaperPage() {
@@ -47,6 +48,9 @@ function PaperDetail({ id }: { id: number }) {
         <button onClick={() => summarize.mutate(id)}>{data.summary ? "Regenerate summary" : "Summarize"}</button>
       )}
       {summarize.error && <p className="error">{summarize.error.message}</p>}
+
+      <h3>Ask about this paper</h3>
+      <Chat key={id} paperId={id} />
     </section>
   );
 }
