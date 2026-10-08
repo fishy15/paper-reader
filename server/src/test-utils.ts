@@ -16,6 +16,10 @@ export function fakeLlm(overrides: Partial<Llm> = {}): Llm {
       abstract: "Fake abstract.",
     }),
     summarize: async () => "Fake summary.",
+    answer: async function* () {
+      yield "Fake ";
+      yield "answer.";
+    },
     ...overrides,
   };
 }

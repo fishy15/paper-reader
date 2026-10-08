@@ -6,8 +6,33 @@ const metadata = { title: "A Paper", authors: ["Ada Lovelace"], year: 2021, abst
 
 function fakeClient(respond: () => Promise<Partial<GenerateContentResponse>>) {
   const generateContent = vi.fn(respond as GeminiClient["models"]["generateContent"]);
-  return { client: { models: { generateContent } } satisfies GeminiClient, generateContent };
+  const generateContentStream = vi.fn<GeminiClient["models"]["generateContentStream"]>(async () => {
+    throw new Error("unexpected streaming call");
+  });
+  return { client: { models: { generateContent, generateContentStream } } satisfies GeminiClient, generateContent };
 }
+
+/** A client whose streaming call yields the given chunks (an Error in the list is thrown at that point). */
+function fakeStreamClient(chunks: (Partial<GenerateContentResponse> | Error)[]) {
+  const generateContentStream = vi.fn<GeminiClient["models"]["generateContentStream"]>(async () =>
+    (async function* () {
+      for (const chunk of chunks) {
+        if (chunk instanceof Error) throw chunk;
+        yield chunk as GenerateContentResponse;
+      }
+    })(),
+  );
+  const generateContent = vi.fn<GeminiClient["models"]["generateContent"]>();
+  return { client: { models: { generateContent, generateContentStream } } satisfies GeminiClient, generateContentStream };
+}
+
+async function collect(stream: AsyncGenerator<string>) {
+  const parts: string[] = [];
+  for await (const part of stream) parts.push(part);
+  return parts;
+}
+
+const question = (overrides = {}) => ({ title: "A Paper", text: "Paper body", history: [], question: "Why?", ...overrides });
 
 function makeLlm(client: GeminiClient, acquire = async () => {}) {
   return createLlm({ model: "test-model", requestsPerMinute: 5, client, acquire });
@@ -78,5 +103,69 @@ describe("gemini llm", () => {
       const { client } = fakeClient(async () => response);
       await expect(makeLlm(client).extractMetadata("x")).rejects.toThrow(message);
     }
+  });
+});
+
+describe("gemini llm answer", () => {
+  it("streams the text chunks and builds the conversation from the history", async () => {
+    const { client, generateContentStream } = fakeStreamClient([{ text: "Because " }, { text: "of X." }]);
+    const history = [
+      { role: "user" as const, content: "What is it?" },
+      { role: "assistant" as const, content: "A method." },
+    ];
+
+    expect(await collect(makeLlm(client).answer(question({ history })))).toEqual(["Because ", "of X."]);
+
+    const params = generateContentStream.mock.calls[0]![0];
+    expect(params.contents).toEqual([
+      { role: "user", parts: [{ text: "What is it?" }] },
+      { role: "model", parts: [{ text: "A method." }] },
+      { role: "user", parts: [{ text: "Why?" }] },
+    ]);
+    const system = params.config?.systemInstruction as string;
+    expect(system).toContain("Title: A Paper");
+    expect(system).toContain("<paper_text>\nPaper body\n</paper_text>");
+  });
+
+  it("skips chunks without text and waits for the rate limiter first", async () => {
+    const order: string[] = [];
+    const { client, generateContentStream } = fakeStreamClient([{ text: "" }, { text: "Hi" }, { candidates: [{ finishReason: "STOP" as never }] }]);
+    const original = generateContentStream.getMockImplementation()!;
+    generateContentStream.mockImplementation(async (params) => {
+      order.push("request");
+      return original(params);
+    });
+    const llm = makeLlm(client, async () => void order.push("acquire"));
+    expect(await collect(llm.answer(question()))).toEqual(["Hi"]);
+    expect(order).toEqual(["acquire", "request"]);
+  });
+
+  it("fails with a helpful message when no API key is configured", async () => {
+    const llm = createLlm({ model: "m", requestsPerMinute: 5, acquire: async () => {} });
+    await expect(collect(llm.answer(question()))).rejects.toThrow(/GEMINI_API_KEY is not set/);
+  });
+
+  it("maps HTTP 429 to a rate limit error, before or during the stream", async () => {
+    const limited = new ApiError({ message: "quota exceeded", status: 429 });
+    const before = fakeStreamClient([]);
+    before.generateContentStream.mockRejectedValueOnce(limited);
+    await expect(collect(makeLlm(before.client).answer(question()))).rejects.toBeInstanceOf(LlmRateLimitError);
+
+    const during = fakeStreamClient([{ text: "partial" }, limited]);
+    const received: string[] = [];
+    await expect(
+      (async () => {
+        for await (const part of makeLlm(during.client).answer(question())) received.push(part);
+      })(),
+    ).rejects.toBeInstanceOf(LlmRateLimitError);
+    expect(received).toEqual(["partial"]);
+  });
+
+  it("reports blocked prompts and empty streams", async () => {
+    const blocked = fakeStreamClient([{ promptFeedback: { blockReason: "SAFETY" as never } }]);
+    await expect(collect(makeLlm(blocked.client).answer(question()))).rejects.toThrow(/declined.*SAFETY/);
+
+    const empty = fakeStreamClient([{ candidates: [{ finishReason: "MAX_TOKENS" as never }] }]);
+    await expect(collect(makeLlm(empty.client).answer(question()))).rejects.toThrow(/no content.*MAX_TOKENS/);
   });
 });
