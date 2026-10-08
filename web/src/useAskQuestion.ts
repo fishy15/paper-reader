@@ -13,6 +13,7 @@ export function useAskQuestion(paperId: number) {
   const queryClient = useQueryClient();
   const [turn, setTurn] = useState<Turn | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stopped, setStopped] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
@@ -26,6 +27,7 @@ export function useAskQuestion(paperId: number) {
     const abort = new AbortController();
     controller.current = abort;
     setError(null);
+    setStopped(false);
     setTurn({ question, answer: "" });
     setStreaming(true);
     try {
@@ -42,7 +44,8 @@ export function useAskQuestion(paperId: number) {
       return true;
     } catch (err) {
       // A stopped answer is not an error; anything else is shown to the user.
-      if (!abort.signal.aborted) setError(err instanceof Error ? err.message : String(err));
+      if (abort.signal.aborted) setStopped(true);
+      else setError(err instanceof Error ? err.message : String(err));
       return false;
     } finally {
       // Whatever happened, the turn is over: it is either saved (and now in the messages) or dropped.
@@ -52,5 +55,5 @@ export function useAskQuestion(paperId: number) {
     }
   }
 
-  return { turn, error, streaming, ask, stop };
+  return { turn, error, stopped, streaming, ask, stop };
 }

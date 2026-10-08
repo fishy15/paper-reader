@@ -8,7 +8,7 @@ function Message({ role, children }: { role: "user" | "assistant"; children: Rea
 
 export function Chat({ paperId }: { paperId: number }) {
   const messages = useMessages(paperId);
-  const { turn, error, streaming, ask, stop } = useAskQuestion(paperId);
+  const { turn, error, stopped, streaming, ask, stop } = useAskQuestion(paperId);
   const [input, setInput] = useState("");
 
   async function onSubmit(e: SubmitEvent) {
@@ -37,6 +37,7 @@ export function Chat({ paperId }: { paperId: number }) {
         )}
       </div>
       {error && <p className="error">{error}</p>}
+      {stopped && <p className="muted">Answer stopped. The question and partial answer were not saved.</p>}
       <form onSubmit={onSubmit} className="inline-form">
         <input
           value={input}
@@ -45,12 +46,14 @@ export function Chat({ paperId }: { paperId: number }) {
           aria-label="Question about this paper"
           disabled={streaming}
         />
+        {/* Distinct keys keep these two from sharing one DOM node: a Stop click that flips the node
+            back to a submit button before the browser finishes the click would submit the form again. */}
         {streaming ? (
-          <button type="button" onClick={stop}>
+          <button key="stop" type="button" onClick={stop}>
             Stop
           </button>
         ) : (
-          <button type="submit" disabled={input.trim() === ""}>
+          <button key="ask" type="submit" disabled={input.trim() === ""}>
             Ask
           </button>
         )}
