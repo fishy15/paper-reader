@@ -1,7 +1,8 @@
 import { hc } from "hono/client";
 import { z } from "zod";
 import type { AppType } from "@paper-reader/server/app";
-import type { SearchResult } from "@paper-reader/shared";
+import type { QaStreamEvent, SearchResult } from "@paper-reader/shared";
+import { readQaEvents } from "./qaStream.js";
 
 const client = hc<AppType>("/");
 
@@ -53,4 +54,29 @@ export async function summarizePaper(id: number) {
   const res = await client.api.papers[":id"].summarize.$post({ param: { id: String(id) } });
   if (!res.ok) throw new ApiError(await errorMessage(res));
   return res.json();
+}
+
+export async function listMessages(paperId: number) {
+  const res = await client.api.papers[":id"].messages.$get({ param: { id: String(paperId) } });
+  if (!res.ok) throw new ApiError(await errorMessage(res));
+  return res.json();
+}
+
+/**
+ * Asks a question about a paper and yields the answer as it streams in. Failures before the
+ * answer starts (no PDF, rate limit, ...) throw an `ApiError`; failures after it starts arrive
+ * as an `error` event.
+ */
+export async function* askQuestion(
+  paperId: number,
+  question: string,
+  signal?: AbortSignal,
+): AsyncGenerator<QaStreamEvent> {
+  const res = await client.api.papers[":id"].ask.$post(
+    { param: { id: String(paperId) }, json: { question } },
+    signal ? { init: { signal } } : undefined,
+  );
+  if (!res.ok) throw new ApiError(await errorMessage(res));
+  if (!res.body) throw new ApiError("The server sent an empty response");
+  yield* readQaEvents(res.body);
 }
