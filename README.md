@@ -1,3 +1,6 @@
+AI Disclaimer: Most of the code and documentation in this repository was AI-generated
+with some human review along the way.
+
 # Paper Reader
 
 A local web app for reading research papers. It can:

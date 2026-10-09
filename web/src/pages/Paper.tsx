@@ -28,14 +28,14 @@ function PaperDetail({ id }: { id: number }) {
       </h2>
       {byline && <p className="byline">{byline}</p>}
       <div className="actions">
-        {data.url && (
-          <a href={data.url} target="_blank" rel="noreferrer">
-            Semantic Scholar
-          </a>
-        )}
         {data.pdfUrl && (
           <a href={data.pdfUrl} target="_blank" rel="noreferrer">
-            PDF
+            PDF ↗
+          </a>
+        )}
+        {data.url && (
+          <a href={data.url} target="_blank" rel="noreferrer">
+            Semantic Scholar ↗
           </a>
         )}
       </div>

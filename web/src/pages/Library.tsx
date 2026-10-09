@@ -17,8 +17,12 @@ export function Library() {
         <p className="muted">Your library is empty. Search for papers or upload a PDF.</p>
       )}
       {papers.data?.map((paper) => (
-        <PaperCard key={paper.id} paper={paper} badge={paper.source === "upload" ? "uploaded" : undefined}>
-          <Link to={`/papers/${paper.id}`}>More Info</Link>
+        <PaperCard
+          key={paper.id}
+          paper={paper}
+          badge={paper.source === "upload" ? "uploaded" : undefined}
+          leading={<Link to={`/papers/${paper.id}`}>More Info</Link>}
+        >
           <button
             className="danger"
             disabled={remove.isPending}

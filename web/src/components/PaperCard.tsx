@@ -4,10 +4,13 @@ import type { PaperMetadata } from "@paper-reader/shared";
 interface PaperCardProps {
   paper: PaperMetadata & { pdfUrl: string | null };
   badge?: string | undefined;
+  /** Actions shown first, before the external links. */
+  leading?: ReactNode;
+  /** Actions shown last, pushed to the right edge. */
   children?: ReactNode;
 }
 
-export function PaperCard({ paper, badge, children }: PaperCardProps) {
+export function PaperCard({ paper, badge, leading, children }: PaperCardProps) {
   const byline = paper.authors.join(", ");
   return (
     <article className="card">
@@ -26,17 +29,18 @@ export function PaperCard({ paper, badge, children }: PaperCardProps) {
         <p className="muted">No abstract available.</p>
       )}
       <div className="actions">
-        {paper.url && (
-          <a href={paper.url} target="_blank" rel="noreferrer">
-            Semantic Scholar
-          </a>
-        )}
+        {leading}
         {paper.pdfUrl && (
           <a href={paper.pdfUrl} target="_blank" rel="noreferrer">
-            PDF
+            PDF ↗
           </a>
         )}
-        {children}
+        {paper.url && (
+          <a href={paper.url} target="_blank" rel="noreferrer">
+            Semantic Scholar ↗
+          </a>
+        )}
+        {children && <span className="actions-end">{children}</span>}
       </div>
     </article>
   );
