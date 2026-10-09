@@ -28,7 +28,7 @@ export function PaperCard({ paper, badge, children }: PaperCardProps) {
       <div className="actions">
         {paper.url && (
           <a href={paper.url} target="_blank" rel="noreferrer">
-            View
+            Semantic Scholar
           </a>
         )}
         {paper.pdfUrl && (

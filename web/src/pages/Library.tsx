@@ -18,7 +18,7 @@ export function Library() {
       )}
       {papers.data?.map((paper) => (
         <PaperCard key={paper.id} paper={paper} badge={paper.source === "upload" ? "uploaded" : undefined}>
-          <Link to={`/papers/${paper.id}`}>Open</Link>
+          <Link to={`/papers/${paper.id}`}>More Info</Link>
           <button
             className="danger"
             disabled={remove.isPending}

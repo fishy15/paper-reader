@@ -30,7 +30,7 @@ function PaperDetail({ id }: { id: number }) {
       <div className="actions">
         {data.url && (
           <a href={data.url} target="_blank" rel="noreferrer">
-            View
+            Semantic Scholar
           </a>
         )}
         {data.pdfUrl && (
