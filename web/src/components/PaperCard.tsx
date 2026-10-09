@@ -8,11 +8,12 @@ interface PaperCardProps {
 }
 
 export function PaperCard({ paper, badge, children }: PaperCardProps) {
-  const byline = [paper.authors.join(", "), paper.year].filter(Boolean).join(" · ");
+  const byline = paper.authors.join(", ");
   return (
     <article className="card">
       <h3>
         {paper.title}
+        {paper.year && ` (${paper.year})`}
         {badge && <span className="badge">{badge}</span>}
       </h3>
       {byline && <p className="byline">{byline}</p>}

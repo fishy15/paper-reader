@@ -16,13 +16,16 @@ function PaperDetail({ id }: { id: number }) {
   if (paper.error) return <p className="error">{paper.error.message}</p>;
 
   const { data } = paper;
-  const byline = [data.authors.join(", "), data.year].filter(Boolean).join(" · ");
+  const byline = data.authors.join(", ");
   return (
     <section>
       <p>
         <Link to="/library">← Library</Link>
       </p>
-      <h2>{data.title}</h2>
+      <h2>
+        {data.title}
+        {data.year && ` (${data.year})`}
+      </h2>
       {byline && <p className="byline">{byline}</p>}
       <div className="actions">
         {data.url && (
