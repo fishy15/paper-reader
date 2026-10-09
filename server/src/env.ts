@@ -15,5 +15,7 @@ const Env = z.object({
 export type Env = z.infer<typeof Env>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  return Env.parse(source);
+  // `PORT=` in a .env file is an empty string, which would otherwise count as 0 or a blank key.
+  const set = Object.entries(source).filter(([, value]) => value !== "");
+  return Env.parse(Object.fromEntries(set));
 }

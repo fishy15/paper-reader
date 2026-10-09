@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const papers = sqliteTable(
   "papers",
@@ -26,15 +26,18 @@ export const papers = sqliteTable(
   ],
 );
 
-export const qaMessages = sqliteTable("qa_messages", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  paperId: integer("paper_id")
-    .notNull()
-    .references(() => papers.id, { onDelete: "cascade" }),
-  role: text("role", { enum: ["user", "assistant"] }).notNull(),
-  content: text("content").notNull(),
-  createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
-});
+export const qaMessages = sqliteTable(
+  "qa_messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    paperId: integer("paper_id")
+      .notNull()
+      .references(() => papers.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+  },
+  (t) => [index("qa_messages_paper_id_idx").on(t.paperId)],
+);
 
 export type PaperRow = typeof papers.$inferSelect;
-export type NewPaperRow = typeof papers.$inferInsert;

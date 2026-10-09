@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import type { Db } from "./db/client.js";
 import { papersRoutes } from "./routes/papers.js";
 import { qaRoutes } from "./routes/qa.js";
@@ -18,7 +19,10 @@ export interface AppDeps {
 
 export function createApp({ db, searchProvider, llm, dataDir }: AppDeps) {
   return new Hono()
+    .notFound((c) => c.json({ error: "Not found" }, 404))
     .onError((err, c) => {
+      // Errors Hono raises itself (e.g. a malformed JSON body) already carry the right status.
+      if (err instanceof HTTPException) return c.json({ error: err.message }, err.status);
       // Single-user local tool: surface the real error message instead of hiding it.
       console.error(err);
       return c.json({ error: err.message }, 500);

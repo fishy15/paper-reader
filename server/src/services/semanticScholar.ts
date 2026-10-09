@@ -63,17 +63,19 @@ export interface SemanticScholarOptions {
   apiKey?: string | undefined;
   fetchFn?: typeof fetch;
   retryDelayMs?: number;
+  /** Gives up on a request (including reading its body) after this long. */
+  timeoutMs?: number;
 }
 
 export function createSemanticScholarProvider(
   options: SemanticScholarOptions = {},
 ): PaperSearchProvider {
-  const { apiKey, fetchFn = fetch, retryDelayMs = 1500 } = options;
+  const { apiKey, fetchFn = fetch, retryDelayMs = 1500, timeoutMs = 15_000 } = options;
 
   async function request(url: string): Promise<Response> {
     const headers: Record<string, string> = apiKey ? { "x-api-key": apiKey } : {};
     try {
-      return await fetchFn(url, { headers });
+      return await fetchFn(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
     } catch {
       throw new SearchProviderError("Could not reach Semantic Scholar", 502);
     }

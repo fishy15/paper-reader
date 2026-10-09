@@ -1,0 +1,1 @@
+CREATE INDEX `qa_messages_paper_id_idx` ON `qa_messages` (`paper_id`);

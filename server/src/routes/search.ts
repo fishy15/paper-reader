@@ -1,7 +1,7 @@
-import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
 import { SearchProviderError, type PaperSearchProvider } from "../services/semanticScholar.js";
+import { validate } from "../validate.js";
 
 const SearchParams = z.object({
   query: z.string().trim().min(1),
@@ -9,7 +9,7 @@ const SearchParams = z.object({
 });
 
 export function searchRoutes(provider: PaperSearchProvider) {
-  return new Hono().get("/", zValidator("query", SearchParams), async (c) => {
+  return new Hono().get("/", validate("query", SearchParams), async (c) => {
     const { query, limit } = c.req.valid("query");
     try {
       return c.json(await provider.search(query, limit), 200);

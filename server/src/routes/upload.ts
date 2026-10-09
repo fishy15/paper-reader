@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -10,6 +9,7 @@ import { papers } from "../db/schema.js";
 import type { ExtractedMetadata, Llm } from "../services/llm.js";
 import { extractPages, isPdf, MAX_PDF_BYTES } from "../services/pdf.js";
 import { toPaper } from "./papers.js";
+import { validate } from "../validate.js";
 
 /** Metadata (title, authors, abstract) lives on the first pages; sending more only costs tokens. */
 const METADATA_PAGES = 2;
@@ -43,7 +43,7 @@ export function uploadRoutes({ db, llm, dataDir }: UploadDeps) {
       maxSize: MAX_PDF_BYTES,
       onError: (c) => c.json({ error: "PDF is too large (limit 25 MB)" }, 413),
     }),
-    zValidator("form", z.object({ file: z.instanceof(File) })),
+    validate("form", z.object({ file: z.instanceof(File) })),
     async (c) => {
       const { file } = c.req.valid("form");
       const bytes = new Uint8Array(await file.arrayBuffer());

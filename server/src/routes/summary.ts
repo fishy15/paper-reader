@@ -1,4 +1,3 @@
-import { zValidator } from "@hono/zod-validator";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Db } from "../db/client.js";
@@ -6,6 +5,7 @@ import { papers } from "../db/schema.js";
 import { LlmRateLimitError, type Llm } from "../services/llm.js";
 import { limitPaperText, loadFullText, PaperTextError } from "../services/paperText.js";
 import { IdParam, toPaper } from "./papers.js";
+import { validate } from "../validate.js";
 
 export interface SummaryDeps {
   db: Db;
@@ -13,7 +13,7 @@ export interface SummaryDeps {
 }
 
 export function summaryRoutes({ db, llm }: SummaryDeps) {
-  return new Hono().post("/:id/summarize", zValidator("param", IdParam), async (c) => {
+  return new Hono().post("/:id/summarize", validate("param", IdParam), async (c) => {
     const { id } = c.req.valid("param");
     const row = db.select().from(papers).where(eq(papers.id, id)).get();
     if (!row) return c.json({ error: "Paper not found" }, 404);

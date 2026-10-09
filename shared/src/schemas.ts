@@ -1,17 +1,18 @@
 import { z } from "zod";
 
+// Generous caps: real metadata is far smaller, but a save request should not store unbounded text.
 export const PaperMetadata = z.object({
-  title: z.string().min(1),
-  authors: z.array(z.string()),
+  title: z.string().min(1).max(2000),
+  authors: z.array(z.string().max(500)).max(1000),
   year: z.number().int().nullable(),
-  abstract: z.string().nullable(),
-  url: z.url().nullable(),
+  abstract: z.string().max(50_000).nullable(),
+  url: z.url().max(2048).nullable(),
 });
 export type PaperMetadata = z.infer<typeof PaperMetadata>;
 
 export const SearchResult = PaperMetadata.extend({
-  externalId: z.string(),
-  pdfUrl: z.url().nullable(),
+  externalId: z.string().min(1).max(200),
+  pdfUrl: z.url().max(2048).nullable(),
 });
 export type SearchResult = z.infer<typeof SearchResult>;
 

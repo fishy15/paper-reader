@@ -1,13 +1,14 @@
-import { zValidator } from "@hono/zod-validator";
 import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { QaInput, type QaStreamEvent } from "@paper-reader/shared";
 import type { Db } from "../db/client.js";
 import { papers, qaMessages } from "../db/schema.js";
+import { toIsoUtc } from "../db/time.js";
 import { LlmRateLimitError, type Llm } from "../services/llm.js";
 import { limitPaperText, loadFullText, PaperTextError } from "../services/paperText.js";
 import { IdParam } from "./papers.js";
+import { validate } from "../validate.js";
 
 /** How many earlier messages (questions and answers) are sent along with a new question. */
 export const HISTORY_MESSAGES = 20;
@@ -19,14 +20,15 @@ export interface QaDeps {
 
 export function qaRoutes({ db, llm }: QaDeps) {
   return new Hono()
-    .get("/:id/messages", zValidator("param", IdParam), (c) => {
+    .get("/:id/messages", validate("param", IdParam), (c) => {
       const { id } = c.req.valid("param");
       if (!db.select({ id: papers.id }).from(papers).where(eq(papers.id, id)).get()) {
         return c.json({ error: "Paper not found" }, 404);
       }
-      return c.json(db.select().from(qaMessages).where(eq(qaMessages.paperId, id)).orderBy(qaMessages.id).all(), 200);
+      const rows = db.select().from(qaMessages).where(eq(qaMessages.paperId, id)).orderBy(qaMessages.id).all();
+      return c.json(rows.map((m) => ({ ...m, createdAt: toIsoUtc(m.createdAt) })), 200);
     })
-    .post("/:id/ask", zValidator("param", IdParam), zValidator("json", QaInput), async (c) => {
+    .post("/:id/ask", validate("param", IdParam), validate("json", QaInput), async (c) => {
       const { id } = c.req.valid("param");
       const { question } = c.req.valid("json");
       const row = db.select().from(papers).where(eq(papers.id, id)).get();

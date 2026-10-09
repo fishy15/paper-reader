@@ -19,6 +19,18 @@ const app = createApp({
   dataDir: env.DATA_DIR,
 });
 
-serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
+const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
   console.log(`Server listening on http://${info.address}:${info.port}`);
 });
+
+// Stop accepting connections, then close the database so SQLite can checkpoint its WAL file.
+function shutdown() {
+  server.close(() => {
+    db.$client.close();
+    process.exit(0);
+  });
+  // Open streams (an answer in progress) would keep the server alive; don't wait for them.
+  if ("closeAllConnections" in server) server.closeAllConnections();
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
