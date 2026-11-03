@@ -38,19 +38,3 @@ export function makeMessage(overrides: Partial<QaMessage> = {}): QaMessage {
 export function ndjson(events: QaStreamEvent[]): string {
   return events.map((e) => `${JSON.stringify(e)}\n`).join("");
 }
-
-/** The same body as a closed byte stream, which is how the server ends a response. */
-export function ndjsonStream(events: QaStreamEvent[]): ReadableStream<Uint8Array<ArrayBuffer>> {
-  return textStream(ndjson(events));
-}
-
-/** Any text as a closed byte stream. */
-export function textStream(text: string): ReadableStream<Uint8Array<ArrayBuffer>> {
-  const bytes = new TextEncoder().encode(text);
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
-    },
-  });
-}

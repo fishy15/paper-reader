@@ -5,7 +5,7 @@ import {
   ApiError, askQuestion, deletePaper, getPaper, listMessages, listPapers, savePaper, searchPapers,
   summarizePaper, uploadPaper,
 } from "./api.js";
-import { makeMessage, makePaper, makeSearchResult, ndjsonStream, textStream } from "./test/fixtures.js";
+import { makeMessage, makePaper, makeSearchResult, ndjson } from "./test/fixtures.js";
 import { server } from "./test/server.js";
 
 async function collect(events: AsyncGenerator<QaStreamEvent>) {
@@ -106,7 +106,7 @@ describe("askQuestion", () => {
     server.use(
       http.post("*/api/papers/2/ask", async ({ request }) => {
         body = await request.json();
-        return new HttpResponse(ndjsonStream([{ type: "delta", text: "Hi" }, { type: "done" }]));
+        return new HttpResponse(ndjson([{ type: "delta", text: "Hi" }, { type: "done" }]));
       }),
     );
     expect(await collect(askQuestion(2, "Why?"))).toEqual([{ type: "delta", text: "Hi" }, { type: "done" }]);
@@ -119,7 +119,7 @@ describe("askQuestion", () => {
   });
 
   it("throws when the stream carries an unreadable line", async () => {
-    server.use(http.post("*/api/papers/2/ask", () => new HttpResponse(textStream("not json\n"))));
+    server.use(http.post("*/api/papers/2/ask", () => new HttpResponse("not json\n")));
     await expect(collect(askQuestion(2, "q"))).rejects.toThrow(/unreadable response/);
   });
 

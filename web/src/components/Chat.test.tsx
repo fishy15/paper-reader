@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { delay, http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import type { QaMessage } from "@paper-reader/shared";
-import { makeMessage, ndjson, ndjsonStream } from "../test/fixtures.js";
+import { makeMessage, ndjson } from "../test/fixtures.js";
 import { renderApp } from "../test/render.js";
 import { server } from "../test/server.js";
 import { Chat } from "./Chat.js";
@@ -95,9 +95,7 @@ describe("Chat", () => {
     useConversation();
     server.use(
       http.post("*/api/papers/1/ask", () =>
-        // A closed stream, as the server sends it. (With a plain string body under MSW, cancelling the
-        // reader after an early return from an `error` event never settles and the chat stays in "streaming".)
-        new HttpResponse(ndjsonStream([{ type: "delta", text: "Partial" }, { type: "error", message: "Model overloaded" }])),
+        new HttpResponse(ndjson([{ type: "delta", text: "Partial" }, { type: "error", message: "Model overloaded" }])),
       ),
     );
     const { user } = renderApp(<Chat paperId={1} />);

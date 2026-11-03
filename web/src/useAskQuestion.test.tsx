@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { QaStreamEvent } from "@paper-reader/shared";
 import { messagesKey } from "./queries.js";
-import { ndjsonStream } from "./test/fixtures.js";
+import { ndjson } from "./test/fixtures.js";
 import { server } from "./test/server.js";
 import { useAskQuestion } from "./useAskQuestion.js";
 
@@ -18,7 +18,7 @@ function setup(paperId = 1) {
 }
 
 const respondWith = (events: QaStreamEvent[]) =>
-  server.use(http.post("*/api/papers/1/ask", () => new HttpResponse(ndjsonStream(events))));
+  server.use(http.post("*/api/papers/1/ask", () => new HttpResponse(ndjson(events))));
 
 const hang = () =>
   server.use(

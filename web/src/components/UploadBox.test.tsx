@@ -15,18 +15,21 @@ const saved = {
 
 describe("UploadBox", () => {
   it("uploads a chosen file and refreshes the library", async () => {
-    let body = "";
+    let uploaded: FormDataEntryValue | null = null;
     server.use(
       http.post("*/api/papers/upload", async ({ request }) => {
-        // Raw multipart text: jsdom's File isn't a real file to undici's FormData, so only the field name is checked.
-        body = await request.text();
+        uploaded = (await request.formData()).get("file");
         return HttpResponse.json(saved, { status: 201 });
       }),
     );
     const { user, queryClient } = renderApp(<UploadBox />);
     queryClient.setQueryData(["papers"], []);
     await user.upload(fileInput(), pdf());
-    await waitFor(() => expect(body).toContain('name="file"'));
+    await waitFor(() => expect(uploaded).toBeInstanceOf(File));
+    const file = uploaded as unknown as File;
+    expect(file.name).toBe("paper.pdf");
+    expect(file.type).toBe("application/pdf");
+    expect(await file.text()).toBe("%PDF-1.4");
     await waitFor(() => expect(queryClient.getQueryState(["papers"])?.isInvalidated).toBe(true));
   });
 
