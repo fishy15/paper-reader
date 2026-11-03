@@ -59,7 +59,7 @@ describe("PaperPage", () => {
       http.get("*/api/papers/1", () => HttpResponse.json(paper)),
       http.get("*/api/papers/1/messages", () => HttpResponse.json([])),
       http.post("*/api/papers/1/summarize", async () => {
-        await delay(20);
+        await delay(200);
         paper = makePaper({ summary: "It is about X." });
         return HttpResponse.json(paper);
       }),
