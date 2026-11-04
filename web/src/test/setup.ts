@@ -20,7 +20,20 @@ globalThis.fetch = (input, init) =>
 // (as the chat does after an `error` event) would never settle.
 server.events.on("response:mocked", ({ response }) => void response.body?.cancel());
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeAll(() => {
+  server.listen({ onUnhandledRequest: "error" });
+
+  // Real fetch errors the body stream when its signal aborts after the response has started; MSW's mocked
+  // response does not, so a reader would hang. Wrap MSW's fetch (installed by `listen`, so this has to come
+  // after it) and pipe the body through the signal to get the real behavior.
+  const mswFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const response = await mswFetch(input, init);
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    if (!signal || !response.body) return response;
+    return new Response(response.body.pipeThrough(new TransformStream(), { signal }), response);
+  };
+});
 afterEach(() => {
   cleanup();
   server.resetHandlers();

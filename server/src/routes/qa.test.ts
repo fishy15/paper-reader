@@ -72,13 +72,23 @@ describe("POST /api/papers/:id/ask", () => {
     }));
     deps.db.insert(qaMessages).values(earlier).run();
 
-    await readEvents(await ask(app, id, { question: "  And now?  " }));
+    await readEvents(await ask(app, id, { question: "And now?" }));
 
     const input = answer.mock.calls[0]![0];
-    expect(input.question).toBe("And now?");
     expect(input.history).toHaveLength(HISTORY_MESSAGES);
     expect(input.history[0]).toEqual({ role: "user", content: "message 4" });
     expect(input.history.at(-1)).toEqual({ role: "assistant", content: `message ${HISTORY_MESSAGES + 3}` });
+  });
+
+  it("trims the question before sending it to the model and saving it", async () => {
+    const answer = answering("ok");
+    const { app, deps } = makeTestApp({ llm: fakeLlm({ answer }) });
+    const { id } = insertPaper(deps);
+
+    await readEvents(await ask(app, id, { question: "  Why?  " }));
+
+    expect(answer).toHaveBeenCalledWith(expect.objectContaining({ question: "Why?" }));
+    expect((await messages(app, id))[0]).toMatchObject({ role: "user", content: "Why?" });
   });
 
   it("returns a real status code when the LLM fails before answering, and saves nothing", async () => {
@@ -95,7 +105,7 @@ describe("POST /api/papers/:id/ask", () => {
   });
 
   it("reports a failure partway through as an error event and saves nothing", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const failing = vi.fn<Llm["answer"]>(async function* () {
       yield "Partial";
       throw new Error("connection reset");
@@ -109,6 +119,7 @@ describe("POST /api/papers/:id/ask", () => {
       { type: "delta", text: "Partial" },
       { type: "error", message: "connection reset" },
     ]);
+    expect(logged).toHaveBeenCalledWith(expect.objectContaining({ message: "connection reset" }));
     expect(await messages(app, id)).toEqual([]);
   });
 
@@ -152,12 +163,19 @@ describe("GET /api/papers/:id/messages", () => {
     expect(await messages(app, b.id)).toHaveLength(2);
   });
 
-  it("404s for a missing paper, and the messages are deleted with their paper", async () => {
-    const { app, deps } = makeTestApp();
+  it("404s for a missing paper", async () => {
+    const { app } = makeTestApp();
     expect((await app.request("/api/papers/999/messages")).status).toBe(404);
+  });
+});
 
+describe("deleting a paper", () => {
+  it("deletes its messages too", async () => {
+    const { app, deps } = makeTestApp();
     const { id } = insertPaper(deps);
     await readEvents(await ask(app, id));
+    expect(await messages(app, id)).toHaveLength(2);
+
     await app.request(`/api/papers/${id}`, { method: "DELETE" });
     expect(deps.db.select().from(qaMessages).where(eq(qaMessages.paperId, id)).all()).toEqual([]);
   });

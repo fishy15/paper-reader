@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { makeTestApp } from "../test-utils.js";
 import { createSemanticScholarProvider, SearchProviderError } from "./semanticScholar.js";
 
 const json = (body: unknown, status = 200) =>
@@ -104,29 +103,5 @@ describe("semantic scholar provider", () => {
       },
     });
     await expect(down.search("x", 5)).rejects.toMatchObject({ status: 502 });
-  });
-});
-
-describe("search route", () => {
-  const makeApp = (search: (query: string, limit: number) => Promise<never[]>) =>
-    makeTestApp({ searchProvider: { search } }).app;
-
-  it("passes the query to the provider and validates input", async () => {
-    const search = vi.fn(async () => []);
-    const app = makeApp(search);
-    expect((await app.request("/api/search?query=attention")).status).toBe(200);
-    expect(search).toHaveBeenCalledWith("attention", 20);
-    expect((await app.request("/api/search?query=")).status).toBe(400);
-    expect((await app.request("/api/search")).status).toBe(400);
-    expect((await app.request("/api/search?query=a&limit=500")).status).toBe(400);
-  });
-
-  it("maps provider errors to their status", async () => {
-    const app = makeApp(async () => {
-      throw new SearchProviderError("slow down", 429);
-    });
-    const res = await app.request("/api/search?query=x");
-    expect(res.status).toBe(429);
-    expect(await res.json()).toEqual({ error: "slow down" });
   });
 });

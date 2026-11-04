@@ -17,7 +17,7 @@ describe("papers routes", () => {
     app = makeTestApp().app;
   });
 
-  const post = (body: unknown) =>
+  const savePaper = (body: unknown) =>
     app.request("/api/papers/from-search", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -25,7 +25,7 @@ describe("papers routes", () => {
     });
 
   it("saves, lists, fetches and deletes a paper", async () => {
-    const created = await post(sample);
+    const created = await savePaper(sample);
     expect(created.status).toBe(201);
     const paper = (await created.json()) as { id: number; title: string; url: string; pdfUrl: string };
     expect(paper.title).toBe(sample.title);
@@ -41,14 +41,14 @@ describe("papers routes", () => {
   });
 
   it("dedupes on externalId", async () => {
-    await post(sample);
-    const again = await post(sample);
+    await savePaper(sample);
+    const again = await savePaper(sample);
     expect(again.status).toBe(200);
     const list = (await (await app.request("/api/papers")).json()) as unknown[];
     expect(list).toHaveLength(1);
   });
 
   it("rejects invalid input", async () => {
-    expect((await post({ title: "" })).status).toBe(400);
+    expect((await savePaper({ title: "" })).status).toBe(400);
   });
 });

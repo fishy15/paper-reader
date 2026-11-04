@@ -750,10 +750,10 @@ The file has thirteen tests of the typed API client with MSW. I probed `api.ts`:
 `AbortError`. An abort after the first chunk hangs under MSW but rejects with `AbortError` with native fetch
 against a real server, so that hang is an MSW artifact, not an app bug.
 
-**Test-environment fix** (in `web/src/test/setup.ts`, our own test setup). Under MSW, aborting after a response
-has started does not error the body stream. In the `fetch` wrapper, when the request has a signal, pipe the
-response body through it (`pipeThrough(new TransformStream(), { signal })`) so aborting errors the stream as a
-real fetch does. The planned `useAskQuestion` and `Chat` stop tests need this too.
+**Test-environment fix** (done, in `web/src/test/setup.ts`). Aborting after a response has started now errors the
+body stream as real fetch does: `setup.ts` wraps MSW's `fetch` after `server.listen()` and pipes the body through the
+request's signal. It has to wrap MSW's `fetch`, because MSW replaces `globalThis.fetch` in `listen()`. The planned
+`useAskQuestion` and `Chat` stop tests rely on it.
 
 **Tests for the planned code changes** (recorded under "Web API client" in `ISSUES.md`). These fail until the
 code is changed, which needs approval first.
@@ -1202,49 +1202,7 @@ Skipped on purpose:
 
 ## Cleanups
 
-- **Rename the `post` helper in `server/src/routes/papers.test.ts:20`** to something like `savePaper`. It
-  calls `POST /api/papers/from-search` to create a paper, but the name `post` reads like a generic HTTP
-  helper next to the plain GET calls in the same file.
-- **Split the question-trimming check out of the history test in `server/src/routes/qa.test.ts:64`.**
-  "sends earlier messages as history, at most the most recent ones" also sends `"  And now?  "` and
-  asserts the trimmed question, so it covers two unrelated behaviors. Change it to send a plain
-  question, and add a separate test that sends `"  Why?  "` and checks both that the LLM receives
-  `"Why?"` and that the saved user message has `content: "Why?"`. The schema-level trim is already
-  tested in `schemas.test.ts`, so the new test only needs to cover the route's wiring.
-- **Restore mocks consistently in the server tests.** `server/vitest.config.ts` doesn't set
-  `restoreMocks`, so spies stay in place after the test that created them. `qa.test.ts:98` and
-  `app.test.ts:10` silence `console.error` and never restore it, which hides real errors in later tests
-  in the same file. `summary.test.ts:25` and `upload.test.ts:117` restore by hand. Setting
-  `restoreMocks: true` in the server config, as the web config does, would cover all of them and make
-  the manual `vi.restoreAllMocks()` calls redundant. Also set `unstubGlobals: true`, which
-  `paperText.test.ts` needs for its `vi.stubGlobal("fetch", ...)` (now hand-wrapped in `try/finally`).
-  Optionally, assert on the `console.error` spy in `qa.test.ts:98` (it is currently only silenced), as
-  `app.test.ts` does.
-- **Name the question length limit in source, but keep the literal in the tests.** The limit is a
-  literal `4000` in `shared/src/schemas.ts:47` (`QaInput`). Exporting a `MAX_QUESTION_LENGTH` constant
-  from `shared` would let the web `Chat` input use it as `maxLength`, so the UI and server can't drift.
-  The tests (`schemas.test.ts:37-38`, `qa.test.ts:130`) should keep hard-coded `4000` and `4001`. If they
-  imported the constant they would still pass after an accidental change to the limit, whereas a literal
-  makes the change fail a test. The `qa.test.ts` route test with `4001` only shows that validation is
-  wired up, so it is fine as it is. This needs a change to `shared/src/schemas.ts`, which is source code,
-  so ask first. Today the web `Chat` input has no `maxLength`, so an over-limit question only fails with
-  the server's 400.
-- **Split `server/src/routes/qa.test.ts:155` ("404s for a missing paper, and the messages are deleted with
-  their paper").** It covers two unrelated behaviors. The `GET /api/papers/999/messages` 404 is the
-  messages route's own branch and needs no setup, so it should be its own test. The delete cascade is
-  driven by `DELETE /api/papers/:id` and the foreign key, so it fits better in `papers.test.ts` or its
-  own `describe`. The cascade half also never checks that messages exist before the delete, so it would
-  pass if `ask` stored nothing. Add `expect(await messages(app, id)).toHaveLength(2)` before the delete.
-  The test at line 138 (ordering and per-paper isolation) shares one setup and can stay combined.
-- **Keep the extracted `fullText` out of responses by construction, not by convention.** `toPaper` omits it
-  from its parameter type, but TypeScript doesn't check properties that arrive through a spread, so a
-  refactor to `{ ...row, ... }` would compile and send up to 400,000 characters per paper. The list route
-  already avoids it by leaving the column out of its `SELECT`. Doing the same in `GET /:id` and in the
-  summarize update's `returning()` (reusing `paperColumns`) would make a leak impossible. Alternatively,
-  parse responses with the shared `Paper` schema, which strips unknown keys. This changes `papers.ts` and
-  `summary.ts`, so ask first. Recorded in `ISSUES.md`. The response-shape test in `papers.test.ts` stays as
-  the regression guard.
-- **Remove the `describe("search route")` block from `server/src/services/semanticScholar.test.ts`.** It tests
-  the route and repeats `routes/search.test.ts` (the query passed through, the 400 checks, a provider error
-  mapped to its status), whose version is more complete. Removing it also drops its awkward `makeApp` typing.
-
+All done: the `savePaper` rename, splitting the trim and cascade checks out of the `qa.test.ts` tests,
+`restoreMocks`/`unstubGlobals` in the server config plus asserting the `console.error` spy, removing the duplicate
+`search route` block from `semanticScholar.test.ts`, and the abort fix in `web/src/test/setup.ts`. The source-level
+`fullText` change lives in `ISSUES.md`. The tests keep the literal `4000` and `4001` for the question length limit.
