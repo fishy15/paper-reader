@@ -1,6 +1,24 @@
+import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadEnv } from "./env.js";
+
+const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
+const ENV_KEYS = ["PORT", "HOST", "DATA_DIR", "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_RPM", "S2_API_KEY"];
+
+/** The `KEY=value` lines of the repo's .env.example, ignoring comments and blank lines. */
+function readEnvExample(): Record<string, string> {
+  const text = fs.readFileSync(path.join(REPO_ROOT, ".env.example"), "utf8");
+  const lines = text.split("\n").filter((line) => line.trim() !== "" && !line.startsWith("#"));
+  return Object.fromEntries(
+    lines.map((line) => {
+      const eq = line.indexOf("=");
+      return [line.slice(0, eq), line.slice(eq + 1)];
+    }),
+  );
+}
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("loadEnv", () => {
   it("applies defaults for an empty environment", () => {
@@ -19,11 +37,18 @@ describe("loadEnv", () => {
     expect(env.GEMINI_RPM).toBe(15);
   });
 
-  it("treats empty strings as unset", () => {
-    const env = loadEnv({ PORT: "", GEMINI_API_KEY: "", HOST: "" });
+  it("treats empty strings as unset, for every key", () => {
+    const empty = Object.fromEntries(ENV_KEYS.map((key) => [key, ""]));
+    const env = loadEnv(empty);
+    expect(env).toEqual(loadEnv({}));
     expect(env.PORT).toBe(3000);
     expect(env.HOST).toBe("127.0.0.1");
     expect(env.GEMINI_API_KEY).toBeUndefined();
+    expect(env.S2_API_KEY).toBeUndefined();
+  });
+
+  it("treats an undefined value as unset", () => {
+    expect(loadEnv({ PORT: undefined, GEMINI_RPM: undefined })).toEqual(loadEnv({}));
   });
 
   it("keeps provided keys and overrides", () => {
@@ -31,10 +56,78 @@ describe("loadEnv", () => {
     expect(env).toMatchObject({ GEMINI_API_KEY: "k", S2_API_KEY: "s", GEMINI_MODEL: "m", DATA_DIR: "/tmp/x" });
   });
 
-  it("rejects invalid values", () => {
-    expect(() => loadEnv({ PORT: "abc" })).toThrow();
-    expect(() => loadEnv({ PORT: "1.5" })).toThrow();
-    expect(() => loadEnv({ GEMINI_RPM: "0" })).toThrow();
-    expect(() => loadEnv({ GEMINI_RPM: "-3" })).toThrow();
+  it("accepts a GEMINI_RPM below one per minute", () => {
+    expect(loadEnv({ GEMINI_RPM: "0.5" }).GEMINI_RPM).toBe(0.5);
+  });
+
+  it.each<[string, string, RegExp]>([
+    ["PORT", "abc", /PORT/],
+    ["PORT", "1.5", /PORT/],
+    ["GEMINI_RPM", "0", /GEMINI_RPM/],
+    ["GEMINI_RPM", "-3", /GEMINI_RPM/],
+    ["GEMINI_RPM", "Infinity", /GEMINI_RPM/],
+    ["GEMINI_RPM", "NaN", /GEMINI_RPM/],
+  ])("rejects %s=%s and names the variable", (key, value, name) => {
+    expect(() => loadEnv({ [key]: value })).toThrow(name);
+  });
+
+  it("reads process.env when called without an argument", () => {
+    vi.stubEnv("PORT", "4321");
+    expect(loadEnv().PORT).toBe(4321);
+  });
+
+  it("ignores unrelated variables", () => {
+    const env = loadEnv({ PATH: "/x", FOO: "bar" });
+    expect(env).toEqual(loadEnv({}));
+    expect(Object.keys(env)).not.toContain("PATH");
+    expect(Object.keys(env)).not.toContain("FOO");
+  });
+
+  it("defaults DATA_DIR to the data directory at the repo root", () => {
+    const parent = path.dirname(loadEnv({}).DATA_DIR);
+    expect(fs.existsSync(path.join(parent, "server", "package.json"))).toBe(true);
+    expect(path.basename(loadEnv({}).DATA_DIR)).toBe("data");
+  });
+
+  describe(".env.example", () => {
+    it("loads without error and blank values fall back to defaults", () => {
+      const example = readEnvExample();
+      const env = loadEnv(example);
+      expect(example.GEMINI_API_KEY).toBe("");
+      expect(env.GEMINI_API_KEY).toBeUndefined();
+      expect(env.S2_API_KEY).toBeUndefined();
+    });
+
+    it("only has keys the schema knows", () => {
+      const known = Object.keys(loadEnv({ GEMINI_API_KEY: "k", S2_API_KEY: "s" }));
+      expect(Object.keys(readEnvExample()).filter((key) => !known.includes(key))).toEqual([]);
+    });
+
+    it("has every key the schema knows", () => {
+      const keys = Object.keys(readEnvExample());
+      expect(ENV_KEYS.filter((key) => !keys.includes(key))).toEqual([]);
+    });
+  });
+
+  // Planned fixes (see "Configuration" in ISSUES.md): these fail until the schema changes.
+  it.each([
+    ["0", false],
+    ["-1", false],
+    ["70000", false],
+    ["1.5", false],
+    ["1", true],
+    ["65535", true],
+  ])("PORT=%s: accepted is %s", (value, accepted) => {
+    if (accepted) expect(loadEnv({ PORT: value }).PORT).toBe(Number(value));
+    else expect(() => loadEnv({ PORT: value })).toThrow(/PORT/);
+  });
+
+  it.each(["PORT", "HOST", "GEMINI_RPM"])("treats whitespace-only %s as unset", (key) => {
+    expect(loadEnv({ [key]: " " })).toEqual(loadEnv({}));
+  });
+
+  it("resolves a relative DATA_DIR against the repo root and leaves an absolute one alone", () => {
+    expect(loadEnv({ DATA_DIR: "my-data" }).DATA_DIR).toBe(path.join(REPO_ROOT, "my-data"));
+    expect(loadEnv({ DATA_DIR: "/tmp/x" }).DATA_DIR).toBe("/tmp/x");
   });
 });

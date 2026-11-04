@@ -1,5 +1,5 @@
-import { screen, within } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { delay, http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import type { Paper, SearchResult } from "@paper-reader/shared";
 import { makePaper, makeSearchResult } from "../test/fixtures.js";
@@ -10,19 +10,27 @@ import { Search } from "./Search.js";
 function useBackend({ results = [] as SearchResult[], library = [] as Paper[] } = {}) {
   const queries: (string | null)[] = [];
   const saved: unknown[] = [];
+  const requests = { library: 0 };
   server.use(
     http.get("*/api/search", ({ request }) => {
       queries.push(new URL(request.url).searchParams.get("query"));
       return HttpResponse.json(results);
     }),
-    http.get("*/api/papers", () => HttpResponse.json(library)),
+    http.get("*/api/papers", () => {
+      requests.library++;
+      return HttpResponse.json(library);
+    }),
     http.post("*/api/papers/from-search", async ({ request }) => {
       saved.push(await request.json());
       return HttpResponse.json(makePaper({ source: "search", externalId: "s2-1" }), { status: 201 });
     }),
   );
-  return { queries, saved };
+  return { queries, saved, library, requests };
 }
+
+const searchError = (message: string) => HttpResponse.json({ error: message }, { status: 429 });
+const saveError = (message: string) => HttpResponse.json({ error: message }, { status: 500 });
+const cardOf = (title: RegExp) => screen.getByRole("heading", { name: title }).closest("article")!;
 
 const box = () => screen.getByLabelText("Search research papers");
 
@@ -70,7 +78,7 @@ describe("Search", () => {
     await user.type(box(), "x{Enter}");
     const card = (await screen.findByRole("heading", { name: /Savable/ })).closest("article")!;
     await user.click(within(card).getByRole("button", { name: "Save" }));
-    await screen.findByRole("heading", { name: /Savable/ });
+    await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved).toEqual([result]);
   });
 
@@ -94,5 +102,156 @@ describe("Search", () => {
     await user.type(box(), "x{Enter}");
     await user.click(await screen.findByRole("button", { name: "Save" }));
     expect(await screen.findByText("Could not save")).toHaveClass("error");
+  });
+
+  it("turns the button into a disabled Saved once the library has the paper", async () => {
+    const result = makeSearchResult({ externalId: "s2-9", title: "Savable" });
+    const { library, requests } = useBackend({ results: [result] });
+    server.use(
+      http.post("*/api/papers/from-search", () => {
+        const paper = makePaper({ id: 3, source: "search", externalId: "s2-9" });
+        library.push(paper);
+        return HttpResponse.json(paper, { status: 201 });
+      }),
+    );
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "x{Enter}");
+    await screen.findByRole("heading", { name: /Savable/ });
+    await waitFor(() => expect(requests.library).toBe(1));
+    await user.click(within(cardOf(/Savable/)).getByRole("button", { name: "Save" }));
+    expect(await within(cardOf(/Savable/)).findByRole("button", { name: "Saved" })).toBeDisabled();
+    expect(requests.library).toBe(2);
+  });
+
+  it("disables only the Save button of the paper being saved", async () => {
+    useBackend({
+      results: [makeSearchResult({ externalId: "a", title: "Alpha" }), makeSearchResult({ externalId: "b", title: "Beta" })],
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.post("*/api/papers/from-search", async () => {
+        await gate;
+        return HttpResponse.json(makePaper({ source: "search", externalId: "a" }), { status: 201 });
+      }),
+    );
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "x{Enter}");
+    await screen.findByRole("heading", { name: /Alpha/ });
+    await user.click(within(cardOf(/Alpha/)).getByRole("button", { name: "Save" }));
+    try {
+      await waitFor(() => expect(within(cardOf(/Alpha/)).getByRole("button", { name: "Save" })).toBeDisabled());
+      expect(within(cardOf(/Beta/)).getByRole("button", { name: "Save" })).toBeEnabled();
+    } finally {
+      release();
+    }
+    await waitFor(() => expect(within(cardOf(/Alpha/)).getByRole("button", { name: "Save" })).toBeEnabled());
+  });
+
+  it("shows Searching… while the search is in flight", async () => {
+    server.use(
+      http.get("*/api/search", async () => {
+        await delay(100);
+        return HttpResponse.json([makeSearchResult({ title: "Late" })]);
+      }),
+      http.get("*/api/papers", () => HttpResponse.json([])),
+    );
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "x{Enter}");
+    expect(await screen.findByText("Searching…")).toHaveClass("muted");
+    expect(await screen.findByRole("heading", { name: /Late/ })).toBeInTheDocument();
+    expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
+  });
+
+  it("ignores a blank query submitted directly", async () => {
+    const { queries } = useBackend();
+    renderApp(<Search />);
+    fireEvent.submit(box());
+    fireEvent.change(box(), { target: { value: "   " } });
+    fireEvent.submit(box());
+    expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
+    expect(queries).toEqual([]);
+  });
+
+  it("replaces the old error and results with a new search", async () => {
+    let failing = true;
+    server.use(
+      http.get("*/api/search", ({ request }) => {
+        if (new URL(request.url).searchParams.get("query") === "bad") return searchError("Search is rate limited");
+        failing = false;
+        return HttpResponse.json([makeSearchResult({ title: "Fresh" })]);
+      }),
+      http.get("*/api/papers", () => HttpResponse.json([])),
+    );
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "bad{Enter}");
+    await screen.findByText("Search is rate limited");
+    await user.clear(box());
+    await user.type(box(), "good{Enter}");
+    expect(await screen.findByRole("heading", { name: /Fresh/ })).toBeInTheDocument();
+    expect(failing).toBe(false);
+    expect(screen.queryByText("Search is rate limited")).not.toBeInTheDocument();
+  });
+
+  it("still shows results with enabled Save buttons when the library fails to load", async () => {
+    server.use(
+      http.get("*/api/search", () => HttpResponse.json([makeSearchResult({ title: "Found" })])),
+      http.get("*/api/papers", () => saveError("Library down")),
+    );
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "x{Enter}");
+    expect(await screen.findByRole("heading", { name: /Found/ })).toBeInTheDocument();
+    expect(within(cardOf(/Found/)).getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(screen.queryByText("Library down")).not.toBeInTheDocument();
+    expect(document.querySelector(".error")).toBeNull();
+  });
+
+  it("clears a save error after a later successful save", async () => {
+    useBackend({ results: [makeSearchResult({ title: "Retry me" })] });
+    let attempts = 0;
+    server.use(
+      http.post("*/api/papers/from-search", () => {
+        if (++attempts === 1) return saveError("Could not save");
+        return HttpResponse.json(makePaper({ source: "search", externalId: "s2-1" }), { status: 201 });
+      }),
+    );
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "x{Enter}");
+    await user.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByText("Could not save");
+    await user.click(await screen.findByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByText("Could not save")).not.toBeInTheDocument());
+    expect(attempts).toBe(2);
+  });
+
+  it("searches again when the same query is submitted after an error", async () => {
+    let calls = 0;
+    server.use(
+      http.get("*/api/search", () => {
+        if (++calls === 1) return searchError("Search is rate limited");
+        return HttpResponse.json([makeSearchResult({ title: "Second try" })]);
+      }),
+      http.get("*/api/papers", () => HttpResponse.json([])),
+    );
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "graphs{Enter}");
+    await screen.findByText("Search is rate limited");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(await screen.findByRole("heading", { name: /Second try/ })).toBeInTheDocument();
+    expect(calls).toBe(2);
+    expect(screen.queryByText("Search is rate limited")).not.toBeInTheDocument();
+  });
+
+  it("clears a save error when a new search is submitted", async () => {
+    useBackend({ results: [makeSearchResult({ title: "Savable" })] });
+    server.use(http.post("*/api/papers/from-search", () => saveError("Could not save")));
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "one{Enter}");
+    await user.click(await screen.findByRole("button", { name: "Save" }));
+    await screen.findByText("Could not save");
+    await user.clear(box());
+    await user.type(box(), "two{Enter}");
+    await screen.findByRole("heading", { name: /Savable/ });
+    expect(screen.queryByText("Could not save")).not.toBeInTheDocument();
   });
 });

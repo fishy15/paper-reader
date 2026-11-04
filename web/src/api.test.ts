@@ -28,19 +28,25 @@ describe("api", () => {
     expect(query).toBe("a b&c");
   });
 
-  it("listPapers, getPaper, listMessages and summarizePaper return the JSON body", async () => {
+  describe("returns the JSON body", () => {
     const paper = makePaper({ id: 7 });
     const messages = [makeMessage({ paperId: 7 })];
-    server.use(
-      http.get("*/api/papers", () => HttpResponse.json([paper])),
-      http.get("*/api/papers/7", () => HttpResponse.json(paper)),
-      http.get("*/api/papers/7/messages", () => HttpResponse.json(messages)),
-      http.post("*/api/papers/7/summarize", () => HttpResponse.json({ ...paper, summary: "S" })),
-    );
-    expect(await listPapers()).toEqual([paper]);
-    expect(await getPaper(7)).toEqual(paper);
-    expect(await listMessages(7)).toEqual(messages);
-    expect((await summarizePaper(7)).summary).toBe("S");
+    const cases: [string, () => Promise<unknown>, unknown][] = [
+      ["listPapers", () => listPapers(), [paper]],
+      ["getPaper", () => getPaper(7), paper],
+      ["listMessages", () => listMessages(7), messages],
+      ["summarizePaper", () => summarizePaper(7), { ...paper, summary: "S" }],
+    ];
+
+    it.each(cases)("%s", async (_name, call, expected) => {
+      server.use(
+        http.get("*/api/papers", () => HttpResponse.json([paper])),
+        http.get("*/api/papers/7", () => HttpResponse.json(paper)),
+        http.get("*/api/papers/7/messages", () => HttpResponse.json(messages)),
+        http.post("*/api/papers/7/summarize", () => HttpResponse.json({ ...paper, summary: "S" })),
+      );
+      expect(await call()).toEqual(expected);
+    });
   });
 
   it("savePaper posts the search result as JSON", async () => {
@@ -80,23 +86,55 @@ describe("api", () => {
     expect(err.message).toBe("Nope");
   });
 
-  it("falls back to the status code when the body is not an { error } object", async () => {
-    server.use(
-      http.get("*/api/papers", () => new HttpResponse("<html>oops</html>", { status: 502 })),
-      http.get("*/api/papers/1", () => HttpResponse.json({ message: "x" }, { status: 500 })),
-    );
-    await expect(listPapers()).rejects.toThrow("Request failed (502)");
-    await expect(getPaper(1)).rejects.toThrow("Request failed (500)");
+  it.each<[string, () => Response, number]>([
+    ["a non-string error", () => HttpResponse.json({ error: 123 }, { status: 400 }), 400],
+    ["an empty body", () => new HttpResponse(null, { status: 404 }), 404],
+    ["a null body", () => HttpResponse.json(null, { status: 500 }), 500],
+    ["an HTML body", () => new HttpResponse("<html>oops</html>", { status: 502 }), 502],
+    ["a { message } body", () => HttpResponse.json({ message: "x" }, { status: 500 }), 500],
+    ["an empty error message", () => HttpResponse.json({ error: "" }, { status: 500 }), 500],
+  ])("falls back to the status code for %s", async (_name, respond, status) => {
+    server.use(http.get("*/api/papers", respond));
+    const err = await listPapers().catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe(`Request failed (${status})`);
   });
 
-  it("every call turns a failed response into an ApiError", async () => {
-    server.use(http.all("*/api/*", () => HttpResponse.json({ error: "Down" }, { status: 500 })));
-    const calls = [
-      () => searchPapers("q"), () => listPapers(), () => savePaper(makeSearchResult()),
-      () => uploadPaper(new File(["x"], "a.pdf")), () => deletePaper(1), () => getPaper(1),
-      () => summarizePaper(1), () => listMessages(1), () => collect(askQuestion(1, "q")),
+  it("turns a network failure into an ApiError", async () => {
+    server.use(http.get("*/api/papers", () => HttpResponse.error()));
+    const err = await listPapers().catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe("Could not reach the server");
+  });
+
+  it("rejects with an AbortError, not an ApiError, when the signal aborted before the call", async () => {
+    server.use(http.post("*/api/papers/2/ask", () => new HttpResponse(ndjson([{ type: "done" }]))));
+    const controller = new AbortController();
+    controller.abort();
+    const err: unknown = await collect(askQuestion(2, "q", controller.signal)).catch((e) => e);
+    expect(err).not.toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ name: "AbortError" });
+  });
+
+  describe("every call surfaces the server's message", () => {
+    const calls: [string, () => Promise<unknown>][] = [
+      ["searchPapers", () => searchPapers("q")],
+      ["listPapers", () => listPapers()],
+      ["savePaper", () => savePaper(makeSearchResult())],
+      ["uploadPaper", () => uploadPaper(new File(["x"], "a.pdf"))],
+      ["deletePaper", () => deletePaper(1)],
+      ["getPaper", () => getPaper(1)],
+      ["summarizePaper", () => summarizePaper(1)],
+      ["listMessages", () => listMessages(1)],
+      ["askQuestion", () => collect(askQuestion(1, "q"))],
     ];
-    for (const call of calls) await expect(call()).rejects.toThrow(ApiError);
+
+    it.each(calls)("%s", async (_name, call) => {
+      server.use(http.all("*/api/*", () => HttpResponse.json({ error: "Down" }, { status: 500 })));
+      const err = await call().catch((e) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err).toMatchObject({ message: "Down" });
+    });
   });
 });
 
@@ -123,6 +161,44 @@ describe("askQuestion", () => {
     await expect(collect(askQuestion(2, "q"))).rejects.toThrow(/unreadable response/);
   });
 
+  it("throws when a successful response has no body", async () => {
+    server.use(http.post("*/api/papers/2/ask", () => new HttpResponse(null)));
+    const err = await collect(askQuestion(2, "q")).catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).toBe("The server sent an empty response");
+  });
+
+  it("yields an error event instead of throwing", async () => {
+    const events: QaStreamEvent[] = [{ type: "delta", text: "Partial" }, { type: "error", message: "boom" }];
+    server.use(http.post("*/api/papers/2/ask", () => new HttpResponse(ndjson(events))));
+    expect(await collect(askQuestion(2, "q"))).toEqual(events);
+  });
+
+  it("yields the first event before the stream closes", async () => {
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const encoder = new TextEncoder();
+    server.use(
+      http.post("*/api/papers/2/ask", () =>
+        new HttpResponse(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              controller.enqueue(encoder.encode(ndjson([{ type: "delta", text: "First" }])));
+              await released;
+              controller.enqueue(encoder.encode(ndjson([{ type: "done" }])));
+              controller.close();
+            },
+          }),
+        ),
+      ),
+    );
+    const events = askQuestion(2, "q");
+    expect(await events.next()).toEqual({ done: false, value: { type: "delta", text: "First" } });
+    release();
+    expect(await events.next()).toEqual({ done: false, value: { type: "done" } });
+    expect((await events.next()).done).toBe(true);
+  });
+
   it("aborts the request when the signal fires", async () => {
     server.use(
       http.post("*/api/papers/2/ask", async () => {
@@ -133,7 +209,25 @@ describe("askQuestion", () => {
     const controller = new AbortController();
     const pending = collect(askQuestion(2, "q", controller.signal));
     controller.abort();
-    await expect(pending).rejects.toThrow();
-    expect(controller.signal.aborted).toBe(true);
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("rejects with an AbortError when aborted after the first chunk", async () => {
+    server.use(
+      http.post("*/api/papers/2/ask", () =>
+        new HttpResponse(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(ndjson([{ type: "delta", text: "A" }])));
+            },
+          }),
+        ),
+      ),
+    );
+    const controller = new AbortController();
+    const events = askQuestion(2, "q", controller.signal);
+    expect((await events.next()).value).toEqual({ type: "delta", text: "A" });
+    controller.abort();
+    await expect(events.next()).rejects.toMatchObject({ name: "AbortError" });
   });
 });
