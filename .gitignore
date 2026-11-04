@@ -3,3 +3,6 @@ dist
 data
 .env
 coverage
+.stryker-tmp
+reports
+server/stryker-setup-*.js
