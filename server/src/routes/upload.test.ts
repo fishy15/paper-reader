@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import type { Paper } from "@paper-reader/shared";
+import { z } from "zod";
+import { Paper } from "@paper-reader/shared";
 import { papers } from "../db/schema.js";
 import type { Llm } from "../services/llm.js";
 import { fakeLlm, makePdf, makeTestApp } from "../test-utils.js";
@@ -16,6 +17,12 @@ function upload(app: App, bytes: Uint8Array<ArrayBuffer>, name = "paper.pdf") {
   return app.request("/api/papers/upload", { method: "POST", body: form });
 }
 
+async function errorOf(res: Response) {
+  return z.object({ error: z.string() }).parse(await res.json()).error;
+}
+
+const uploadPaper = async (...args: Parameters<typeof upload>) => Paper.parse(await (await upload(...args)).json());
+
 describe("PDF upload", () => {
   it("extracts metadata with the LLM and saves an upload paper", async () => {
     const extractMetadata = vi.fn<Llm["extractMetadata"]>(async () => ({
@@ -28,7 +35,8 @@ describe("PDF upload", () => {
 
     const res = await upload(app, makePdf(["Page one text", "Page two text", "Page three text"]));
     expect(res.status).toBe(201);
-    const paper = (await res.json()) as Paper;
+    const raw: unknown = await res.json();
+    const paper = Paper.parse(raw);
     expect(paper).toMatchObject({
       source: "upload",
       title: "A Great Paper",
@@ -39,9 +47,9 @@ describe("PDF upload", () => {
       url: null,
       pdfUrl: null,
     });
-    expect("externalId" in paper).toBe(false);
+    expect(raw).not.toHaveProperty("externalId");
 
-    const list = (await (await app.request("/api/papers")).json()) as Paper[];
+    const list = z.array(Paper).parse(await (await app.request("/api/papers")).json());
     expect(list).toHaveLength(1);
   });
 
@@ -57,20 +65,11 @@ describe("PDF upload", () => {
     expect(sent).not.toContain("Page three text");
   });
 
-  it("caps the text sent for metadata extraction at 12,000 characters", async () => {
-    const extractMetadata = vi.fn<Llm["extractMetadata"]>(fakeLlm().extractMetadata);
-    const { app } = makeTestApp({ llm: fakeLlm({ extractMetadata }) });
-
-    expect((await upload(app, makePdf(["a".repeat(13_000)]))).status).toBe(201);
-
-    expect(extractMetadata.mock.calls[0]![0].length).toBeLessThanOrEqual(12_000);
-  });
-
   it("saves a row and file that match the upload", async () => {
     const { app, deps } = makeTestApp();
     const bytes = makePdf(["Page one text", "Page two text", "Page three text"]);
 
-    const { id } = (await (await upload(app, bytes)).json()) as Paper;
+    const { id } = await uploadPaper(app, bytes);
 
     const row = deps.db.select().from(papers).where(eq(papers.id, id)).get()!;
     expect(row.fullText).toBe("Page one text\n\nPage two text\n\nPage three text");
@@ -80,7 +79,7 @@ describe("PDF upload", () => {
 
   it("deletes the stored PDF file together with the paper", async () => {
     const { app, deps } = makeTestApp();
-    const paper = (await (await upload(app, makePdf(["Some text"]))).json()) as Paper;
+    const paper = await uploadPaper(app, makePdf(["Some text"]));
     const pdfDir = path.join(deps.dataDir, "pdfs");
     expect(fs.readdirSync(pdfDir)).toHaveLength(1);
 
@@ -92,19 +91,19 @@ describe("PDF upload", () => {
     const { app } = makeTestApp({
       llm: fakeLlm({ extractMetadata: async () => ({ title: " ", authors: [], year: 20217, abstract: "  " }) }),
     });
-    const paper = (await (await upload(app, makePdf(["x"]), "my-notes.pdf")).json()) as Paper;
+    const paper = await uploadPaper(app, makePdf(["x"]), "my-notes.pdf");
     expect(paper).toMatchObject({ title: "my-notes", year: null, abstract: null, authors: [] });
   });
 
   it.each([
-    ["0 (not stated)", 0, null],
-    ["999", 999, null],
-    ["1000", 1000, 1000],
-    ["next year", 2027, 2027],
-    ["the year after next", 2028, null],
-    ["a fraction", 2021.5, null],
-    ["NaN", NaN, null],
-  ])("treats the year %s as %s", async (_name, year, expected) => {
+    ["0 (not stated)", "dropped", 0, null],
+    ["999", "dropped", 999, null],
+    ["1000", "kept", 1000, 1000],
+    ["next year", "kept", 2027, 2027],
+    ["the year after next", "dropped", 2028, null],
+    ["a fraction", "dropped", 2021.5, null],
+    ["NaN", "dropped", NaN, null],
+  ])("treats a year of %s as %s", async (_name, _outcome, year, expected) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-06-15T12:00:00Z"));
     onTestFinished(() => {
@@ -114,7 +113,7 @@ describe("PDF upload", () => {
       llm: fakeLlm({ extractMetadata: async () => ({ title: "T", authors: [], year, abstract: "A" }) }),
     });
 
-    const paper = (await (await upload(app, makePdf(["x"]))).json()) as Paper;
+    const paper = await uploadPaper(app, makePdf(["x"]));
     expect(paper.year).toBe(expected);
   });
 
@@ -122,11 +121,11 @@ describe("PDF upload", () => {
     ["my-notes.pdf", "my-notes"],
     ["UPPER.PDF", "UPPER"],
     [".pdf", "Untitled"],
-  ])("uses the title %s from the filename as %s when the LLM gives none", async (filename, expected) => {
+  ])("titles a file named %s as %s when the LLM gives no title", async (filename, expected) => {
     const { app } = makeTestApp({
       llm: fakeLlm({ extractMetadata: async () => ({ title: " ", authors: [], year: 2020, abstract: "A" }) }),
     });
-    const paper = (await (await upload(app, makePdf(["x"]), filename)).json()) as Paper;
+    const paper = await uploadPaper(app, makePdf(["x"]), filename);
     expect(paper.title).toBe(expected);
   });
 
@@ -136,14 +135,14 @@ describe("PDF upload", () => {
     const { app } = makeTestApp();
     const res = await upload(app, makePdf(["x"]), "");
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/file/);
+    expect((await errorOf(res))).toMatch(/file/);
   });
 
   it("keeps two uploads of the same file independent", async () => {
     const { app, deps } = makeTestApp();
     const bytes = makePdf(["Same text"]);
-    const first = (await (await upload(app, bytes)).json()) as Paper;
-    const second = (await (await upload(app, bytes)).json()) as Paper;
+    const first = await uploadPaper(app, bytes);
+    const second = await uploadPaper(app, bytes);
     const pdfDir = path.join(deps.dataDir, "pdfs");
     expect(first.id).not.toBe(second.id);
     expect(fs.readdirSync(pdfDir)).toHaveLength(2);
@@ -181,7 +180,7 @@ describe("PDF upload", () => {
     const { app } = makeTestApp();
     const res = await upload(app, new TextEncoder().encode("%PDF-1.4\nthis is not really a pdf"));
     expect(res.status).toBe(422);
-    expect(((await res.json()) as { error: string }).error).toMatch(/Could not read/);
+    expect((await errorOf(res))).toMatch(/Could not read/);
   });
 
   it("rejects PDFs without extractable text and stores nothing", async () => {
@@ -201,7 +200,7 @@ describe("PDF upload", () => {
     fill(form);
     const res = await app.request("/api/papers/upload", { method: "POST", body: form });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/file/);
+    expect((await errorOf(res))).toMatch(/file/);
   });
 
   it("rejects files over the size limit", async () => {

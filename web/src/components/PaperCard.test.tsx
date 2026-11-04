@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { PaperMetadata } from "@paper-reader/shared";
@@ -41,6 +41,8 @@ describe("PaperCard", () => {
     expect(screen.getByRole("heading", { name: "Attention Is All You Need" })).toBeInTheDocument();
     expect(screen.getByText("No abstract available.")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    // Nothing else is rendered: no year, no byline for an empty author list.
+    expect(screen.getByRole("article")).toHaveTextContent(/^Attention Is All You Need\s*No abstract available\.$/);
   });
 
   it("renders the badge, leading actions and children", () => {
@@ -49,6 +51,7 @@ describe("PaperCard", () => {
         <button>Trail</button>
       </PaperCard>,
     );
+    // The badge is a bare span with no role, so the class is the only way to check it is styled as a badge.
     expect(screen.getByText("uploaded")).toHaveClass("badge");
     expect(screen.getByRole("button", { name: "Lead" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Trail" })).toBeInTheDocument();
@@ -73,10 +76,10 @@ describe("PaperCard", () => {
 
   it("keeps the abstract collapsed until the summary is clicked", async () => {
     const user = userEvent.setup();
-    const { container } = render(<PaperCard paper={paper} />);
-    const details = container.querySelector("details")!;
+    render(<PaperCard paper={paper} />);
+    const details = screen.getByRole("group");
     expect(details).not.toHaveAttribute("open");
-    expect(details.querySelector("summary")).toHaveTextContent("Abstract");
+    expect(within(details).getByText("Abstract")).toBeInTheDocument();
     expect(screen.getByText("We propose the Transformer.")).not.toBeVisible();
 
     await user.click(screen.getByText("Abstract"));
@@ -92,11 +95,13 @@ describe("PaperCard", () => {
     );
     const order = [...container.querySelectorAll("a, button")].map((el) => el.textContent);
     expect(order).toEqual(["Lead", "PDF ↗", "Semantic Scholar ↗", "Trail"]);
+    // The wrapper is a bare span with no role, so the class is the only way to identify it.
     expect(screen.getByRole("button", { name: "Trail" }).parentElement).toHaveClass("actions-end");
   });
 
   it("has no trailing wrapper without children", () => {
     const { container } = render(<PaperCard paper={paper} />);
+    // The wrapper is a bare span with no role, so the class is the only way to look for it.
     expect(container.querySelector(".actions-end")).toBeNull();
   });
 

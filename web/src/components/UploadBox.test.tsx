@@ -1,56 +1,60 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
+import { deferred } from "../test/deferred.js";
+import { makePaper } from "../test/fixtures.js";
 import { server } from "../test/server.js";
 import { renderApp } from "../test/render.js";
 import { UploadBox } from "./UploadBox.js";
 
 const pdf = () => new File(["%PDF-1.4"], "paper.pdf", { type: "application/pdf" });
-const fileInput = () => document.querySelector<HTMLInputElement>('input[type="file"]')!;
-
-const saved = {
-  id: 1, title: "T", authors: [], year: null, abstract: null, url: null,
-  pdfUrl: null, hasPdf: true, summary: null, createdAt: "2026-01-01T00:00:00Z", source: "upload",
+const fileInput = () => {
+  const found = document.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!found) throw new Error("No file input rendered");
+  return found;
 };
 
-/** A promise that is resolved from outside, to hold a mocked upload pending. */
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((r) => (resolve = r));
-  return { promise, resolve };
-}
+const saved = makePaper({ id: 1, title: "T", authors: [], year: null, abstract: null, hasPdf: true });
 
 /** Registers an upload handler that counts requests and records the uploaded filenames. */
 function useUpload(respond: () => Response | Promise<Response> = () => HttpResponse.json(saved, { status: 201 })) {
   const uploads: string[] = [];
   server.use(
     http.post("*/api/papers/upload", async ({ request }) => {
-      uploads.push(((await request.formData()).get("file") as File).name);
+      const file = (await request.formData()).get("file");
+      if (!(file instanceof File)) throw new Error("No file was uploaded");
+      uploads.push(file.name);
       return respond();
     }),
   );
   return uploads;
 }
 
-const zone = () => document.querySelector(".dropzone")!;
+// The drop zone is a plain div with no role or label, so the class is the only way to find it.
+const zone = () => {
+  const found = document.querySelector(".dropzone");
+  if (!found) throw new Error("No drop zone rendered");
+  return found;
+};
 const named = (name: string) => new File(["%PDF-1.4"], name, { type: "application/pdf" });
 
 describe("UploadBox", () => {
   it("uploads a chosen file and refreshes the library", async () => {
-    let uploaded: FormDataEntryValue | null = null;
+    const received: (FormDataEntryValue | null)[] = [];
     server.use(
       http.post("*/api/papers/upload", async ({ request }) => {
-        uploaded = (await request.formData()).get("file");
+        received.push((await request.formData()).get("file"));
         return HttpResponse.json(saved, { status: 201 });
       }),
     );
     const { user, queryClient } = renderApp(<UploadBox />);
     queryClient.setQueryData(["papers"], []);
     await user.upload(fileInput(), pdf());
-    await waitFor(() => expect(uploaded).toBeInstanceOf(File));
+    await waitFor(() => expect(received[0]).toBeInstanceOf(File));
     expect(fileInput()).toHaveAttribute("accept", "application/pdf");
     expect(fileInput()).toHaveAttribute("hidden");
-    const file = uploaded as unknown as File;
+    const file = received[0];
+    if (!(file instanceof File)) throw new Error("No file was uploaded");
     expect(file.name).toBe("paper.pdf");
     expect(file.type).toBe("application/pdf");
     expect(await file.text()).toBe("%PDF-1.4");
@@ -197,6 +201,8 @@ describe("UploadBox", () => {
     fireEvent.drop(zone(), { dataTransfer: { files: [named("first.pdf")] } });
     await screen.findByText(/Uploading/);
     fireEvent.drop(zone(), { dataTransfer: { files: [named("second.pdf")] } });
+    // Give a second upload time to start before the first one finishes.
+    await new Promise((resolve) => setTimeout(resolve, 50));
     gate.resolve();
     await waitFor(() => expect(screen.queryByText(/Uploading/)).not.toBeInTheDocument());
     expect(uploads).toEqual(["first.pdf"]);

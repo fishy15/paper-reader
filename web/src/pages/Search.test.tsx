@@ -7,7 +7,7 @@ import { renderApp } from "../test/render.js";
 import { server } from "../test/server.js";
 import { Search } from "./Search.js";
 
-function useBackend({ results = [] as SearchResult[], library = [] as Paper[] } = {}) {
+function serveBackend({ results = [], library = [] }: { results?: SearchResult[]; library?: Paper[] } = {}) {
   const queries: (string | null)[] = [];
   const saved: unknown[] = [];
   const requests = { library: 0 };
@@ -29,21 +29,25 @@ function useBackend({ results = [] as SearchResult[], library = [] as Paper[] } 
 }
 
 const searchError = (message: string) => HttpResponse.json({ error: message }, { status: 429 });
-const saveError = (message: string) => HttpResponse.json({ error: message }, { status: 500 });
-const cardOf = (title: RegExp) => screen.getByRole("heading", { name: title }).closest("article")!;
+const serverError = (message: string) => HttpResponse.json({ error: message }, { status: 500 });
+function cardOf(title: RegExp): HTMLElement {
+  const article = screen.getByRole("heading", { name: title }).closest("article");
+  if (!article) throw new Error(`No <article> card found for heading ${title}`);
+  return article;
+}
 
 const box = () => screen.getByLabelText("Search research papers");
 
 describe("Search", () => {
   it("disables Search until the query is non-blank and sends nothing on load", () => {
-    const { queries } = useBackend();
+    const { queries } = serveBackend();
     renderApp(<Search />);
     expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
     expect(queries).toEqual([]);
   });
 
   it("searches with the trimmed query and lists results", async () => {
-    const { queries } = useBackend({
+    const { queries } = serveBackend({
       results: [makeSearchResult({ title: "First", externalId: "a" }), makeSearchResult({ title: "Second", externalId: "b" })],
     });
     const { user } = renderApp(<Search />);
@@ -55,7 +59,7 @@ describe("Search", () => {
   });
 
   it("says when nothing was found", async () => {
-    useBackend({ results: [] });
+    serveBackend({ results: [] });
     const { user } = renderApp(<Search />);
     await user.type(box(), "zzz{Enter}");
     expect(await screen.findByText("No papers found.")).toBeInTheDocument();
@@ -73,7 +77,7 @@ describe("Search", () => {
 
   it("saves a result with the full search payload", async () => {
     const result = makeSearchResult({ externalId: "s2-1", title: "Savable" });
-    const { saved } = useBackend({ results: [result] });
+    const { saved } = serveBackend({ results: [result] });
     const { user } = renderApp(<Search />);
     await user.type(box(), "x{Enter}");
     const card = (await screen.findByRole("heading", { name: /Savable/ })).closest("article")!;
@@ -83,7 +87,7 @@ describe("Search", () => {
   });
 
   it("marks results already in the library as Saved and disabled", async () => {
-    useBackend({
+    serveBackend({
       results: [makeSearchResult({ externalId: "have", title: "Have" }), makeSearchResult({ externalId: "new", title: "New" })],
       library: [makePaper({ source: "search", externalId: "have" }), makePaper({ id: 2, source: "upload" })],
     });
@@ -96,7 +100,7 @@ describe("Search", () => {
   });
 
   it("shows an error when saving fails", async () => {
-    useBackend({ results: [makeSearchResult()] });
+    serveBackend({ results: [makeSearchResult()] });
     server.use(http.post("*/api/papers/from-search", () => HttpResponse.json({ error: "Could not save" }, { status: 500 })));
     const { user } = renderApp(<Search />);
     await user.type(box(), "x{Enter}");
@@ -106,7 +110,7 @@ describe("Search", () => {
 
   it("turns the button into a disabled Saved once the library has the paper", async () => {
     const result = makeSearchResult({ externalId: "s2-9", title: "Savable" });
-    const { library, requests } = useBackend({ results: [result] });
+    const { library, requests } = serveBackend({ results: [result] });
     server.use(
       http.post("*/api/papers/from-search", () => {
         const paper = makePaper({ id: 3, source: "search", externalId: "s2-9" });
@@ -124,7 +128,7 @@ describe("Search", () => {
   });
 
   it("disables only the Save button of the paper being saved", async () => {
-    useBackend({
+    serveBackend({
       results: [makeSearchResult({ externalId: "a", title: "Alpha" }), makeSearchResult({ externalId: "b", title: "Beta" })],
     });
     let release!: () => void;
@@ -164,13 +168,18 @@ describe("Search", () => {
   });
 
   it("ignores a blank query submitted directly", async () => {
-    const { queries } = useBackend();
-    renderApp(<Search />);
+    const { queries } = serveBackend({ results: [makeSearchResult({ title: "Real" })] });
+    const { user } = renderApp(<Search />);
     fireEvent.submit(box());
     fireEvent.change(box(), { target: { value: "   " } });
     fireEvent.submit(box());
     expect(screen.queryByText("Searching…")).not.toBeInTheDocument();
-    expect(queries).toEqual([]);
+
+    // A real search afterwards is the first request that arrives, so the blank ones sent nothing.
+    await user.clear(box());
+    await user.type(box(), "real{Enter}");
+    expect(await screen.findByRole("heading", { name: /Real/ })).toBeInTheDocument();
+    expect(queries).toEqual(["real"]);
   });
 
   it("replaces the old error and results with a new search", async () => {
@@ -196,22 +205,25 @@ describe("Search", () => {
   it("still shows results with enabled Save buttons when the library fails to load", async () => {
     server.use(
       http.get("*/api/search", () => HttpResponse.json([makeSearchResult({ title: "Found" })])),
-      http.get("*/api/papers", () => saveError("Library down")),
+      http.get("*/api/papers", () => serverError("Library down")),
     );
-    const { user } = renderApp(<Search />);
+    const { user, queryClient } = renderApp(<Search />);
     await user.type(box(), "x{Enter}");
     expect(await screen.findByRole("heading", { name: /Found/ })).toBeInTheDocument();
+    // Check only once the library request has failed, so a late error would still be seen.
+    await waitFor(() => expect(queryClient.getQueryState(["papers"])?.status).toBe("error"));
     expect(within(cardOf(/Found/)).getByRole("button", { name: "Save" })).toBeEnabled();
     expect(screen.queryByText("Library down")).not.toBeInTheDocument();
+    // Error paragraphs have no role, so a class query is the only option.
     expect(document.querySelector(".error")).toBeNull();
   });
 
   it("clears a save error after a later successful save", async () => {
-    useBackend({ results: [makeSearchResult({ title: "Retry me" })] });
+    serveBackend({ results: [makeSearchResult({ title: "Retry me" })] });
     let attempts = 0;
     server.use(
       http.post("*/api/papers/from-search", () => {
-        if (++attempts === 1) return saveError("Could not save");
+        if (++attempts === 1) return serverError("Could not save");
         return HttpResponse.json(makePaper({ source: "search", externalId: "s2-1" }), { status: 201 });
       }),
     );
@@ -243,8 +255,8 @@ describe("Search", () => {
   });
 
   it("clears a save error when a new search is submitted", async () => {
-    useBackend({ results: [makeSearchResult({ title: "Savable" })] });
-    server.use(http.post("*/api/papers/from-search", () => saveError("Could not save")));
+    serveBackend({ results: [makeSearchResult({ title: "Savable" })] });
+    server.use(http.post("*/api/papers/from-search", () => serverError("Could not save")));
     const { user } = renderApp(<Search />);
     await user.type(box(), "one{Enter}");
     await user.click(await screen.findByRole("button", { name: "Save" }));

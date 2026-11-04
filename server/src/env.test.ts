@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadEnv } from "./env.js";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
-const ENV_KEYS = ["PORT", "HOST", "DATA_DIR", "GEMINI_API_KEY", "GEMINI_MODEL", "GEMINI_RPM", "S2_API_KEY"];
+// Every key `loadEnv` returns, so a key added to the schema is picked up. The schema isn't exported; a new
+// optional key without a default only appears here once it is given a value in this call.
+const ENV_KEYS = Object.keys(loadEnv({ GEMINI_API_KEY: "k", S2_API_KEY: "s" }));
 
 /** The `KEY=value` lines of the repo's .env.example, ignoring comments and blank lines. */
 function readEnvExample(): Record<string, string> {
@@ -109,25 +111,31 @@ describe("loadEnv", () => {
     });
   });
 
-  // Planned fixes (see "Configuration" in ISSUES.md): these fail until the schema changes.
-  it.each([
-    ["0", false],
-    ["-1", false],
-    ["70000", false],
-    ["1.5", false],
-    ["1", true],
-    ["65535", true],
-  ])("PORT=%s: accepted is %s", (value, accepted) => {
-    if (accepted) expect(loadEnv({ PORT: value }).PORT).toBe(Number(value));
-    else expect(() => loadEnv({ PORT: value })).toThrow(/PORT/);
+  // Planned fixes (see "Configuration" in ISSUES.md): tests in the "planned fixes" blocks fail until the schema changes.
+  describe("PORT range", () => {
+    it.each(["1", "65535"])("accepts PORT=%s", (value) => {
+      expect(loadEnv({ PORT: value }).PORT).toBe(Number(value));
+    });
+
+    it("rejects PORT=1.5", () => {
+      expect(() => loadEnv({ PORT: "1.5" })).toThrow(/PORT/);
+    });
+
+    describe("planned fixes", () => {
+      it.each(["0", "-1", "70000"])("rejects PORT=%s", (value) => {
+        expect(() => loadEnv({ PORT: value })).toThrow(/PORT/);
+      });
+    });
   });
 
-  it.each(["PORT", "HOST", "GEMINI_RPM"])("treats whitespace-only %s as unset", (key) => {
-    expect(loadEnv({ [key]: " " })).toEqual(loadEnv({}));
-  });
+  describe("planned fixes", () => {
+    it.each(["PORT", "HOST", "GEMINI_RPM"])("treats whitespace-only %s as unset", (key) => {
+      expect(loadEnv({ [key]: " " })).toEqual(loadEnv({}));
+    });
 
-  it("resolves a relative DATA_DIR against the repo root and leaves an absolute one alone", () => {
-    expect(loadEnv({ DATA_DIR: "my-data" }).DATA_DIR).toBe(path.join(REPO_ROOT, "my-data"));
-    expect(loadEnv({ DATA_DIR: "/tmp/x" }).DATA_DIR).toBe("/tmp/x");
+    it("resolves a relative DATA_DIR against the repo root and leaves an absolute one alone", () => {
+      expect(loadEnv({ DATA_DIR: "my-data" }).DATA_DIR).toBe(path.join(REPO_ROOT, "my-data"));
+      expect(loadEnv({ DATA_DIR: "/tmp/x" }).DATA_DIR).toBe("/tmp/x");
+    });
   });
 });

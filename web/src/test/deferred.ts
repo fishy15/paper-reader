@@ -1,0 +1,10 @@
+/** A promise that is resolved or rejected from outside, to hold a mocked request until the test lets it go. */
+export function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}

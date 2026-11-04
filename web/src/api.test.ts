@@ -14,6 +14,16 @@ async function collect(events: AsyncGenerator<QaStreamEvent>) {
   return out;
 }
 
+/** Awaits a promise that must reject and returns the rejection reason. */
+async function rejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (e) {
+    return e;
+  }
+  return expect.fail("expected the promise to reject");
+}
+
 describe("api", () => {
   it("searchPapers sends the query and returns the results", async () => {
     const results = [makeSearchResult()];
@@ -81,9 +91,9 @@ describe("api", () => {
 
   it("throws an ApiError with the server's message for { error } bodies", async () => {
     server.use(http.get("*/api/papers", () => HttpResponse.json({ error: "Nope" }, { status: 400 })));
-    const err = await listPapers().catch((e) => e);
+    const err = await rejection(listPapers());
     expect(err).toBeInstanceOf(ApiError);
-    expect(err.message).toBe("Nope");
+    expect(err).toMatchObject({ message: "Nope" });
   });
 
   it.each<[string, () => Response, number]>([
@@ -95,23 +105,23 @@ describe("api", () => {
     ["an empty error message", () => HttpResponse.json({ error: "" }, { status: 500 }), 500],
   ])("falls back to the status code for %s", async (_name, respond, status) => {
     server.use(http.get("*/api/papers", respond));
-    const err = await listPapers().catch((e) => e);
+    const err = await rejection(listPapers());
     expect(err).toBeInstanceOf(ApiError);
-    expect(err.message).toBe(`Request failed (${status})`);
+    expect(err).toMatchObject({ message: `Request failed (${status})` });
   });
 
   it("turns a network failure into an ApiError", async () => {
     server.use(http.get("*/api/papers", () => HttpResponse.error()));
-    const err = await listPapers().catch((e) => e);
+    const err = await rejection(listPapers());
     expect(err).toBeInstanceOf(ApiError);
-    expect(err.message).toBe("Could not reach the server");
+    expect(err).toMatchObject({ message: "Could not reach the server" });
   });
 
   it("rejects with an AbortError, not an ApiError, when the signal aborted before the call", async () => {
     server.use(http.post("*/api/papers/2/ask", () => new HttpResponse(ndjson([{ type: "done" }]))));
     const controller = new AbortController();
     controller.abort();
-    const err: unknown = await collect(askQuestion(2, "q", controller.signal)).catch((e) => e);
+    const err = await rejection(collect(askQuestion(2, "q", controller.signal)));
     expect(err).not.toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ name: "AbortError" });
   });
@@ -131,7 +141,7 @@ describe("api", () => {
 
     it.each(calls)("%s", async (_name, call) => {
       server.use(http.all("*/api/*", () => HttpResponse.json({ error: "Down" }, { status: 500 })));
-      const err = await call().catch((e) => e);
+      const err = await rejection(call());
       expect(err).toBeInstanceOf(ApiError);
       expect(err).toMatchObject({ message: "Down" });
     });
@@ -163,9 +173,9 @@ describe("askQuestion", () => {
 
   it("throws when a successful response has no body", async () => {
     server.use(http.post("*/api/papers/2/ask", () => new HttpResponse(null)));
-    const err = await collect(askQuestion(2, "q")).catch((e) => e);
+    const err = await rejection(collect(askQuestion(2, "q")));
     expect(err).toBeInstanceOf(ApiError);
-    expect(err.message).toBe("The server sent an empty response");
+    expect(err).toMatchObject({ message: "The server sent an empty response" });
   });
 
   it("yields an error event instead of throwing", async () => {

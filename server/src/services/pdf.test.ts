@@ -93,11 +93,22 @@ describe("extractPages", () => {
   });
 
   it("throws on bytes that are not a parseable PDF", async () => {
-    await expect(extractPages(new TextEncoder().encode("%PDF-1.4 garbage"))).rejects.toThrow();
+    await expect(extractPages(new TextEncoder().encode("%PDF-1.4 garbage"))).rejects.toMatchObject({
+      name: "InvalidPDFException",
+    });
   });
 
-  it.each([0, 0.3, 0.6, 0.9])("rejects a PDF cut off at %s of its length", async (fraction) => {
+  it("rejects an empty file", async () => {
+    await expect(extractPages(new Uint8Array())).rejects.toMatchObject({
+      name: "InvalidPDFException",
+      message: expect.stringMatching(/empty/i),
+    });
+  });
+
+  it.each([0.3, 0.6, 0.9])("rejects a PDF cut off at %s of its length", async (fraction) => {
     const pdf = makePdf(["one", "two", "three", "four"]);
-    await expect(extractPages(pdf.slice(0, Math.floor(pdf.length * fraction)))).rejects.toThrow();
+    await expect(extractPages(pdf.slice(0, Math.floor(pdf.length * fraction)))).rejects.toMatchObject({
+      name: "InvalidPDFException",
+    });
   });
 });

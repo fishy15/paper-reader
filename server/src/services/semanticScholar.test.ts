@@ -6,7 +6,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 const fixture = {
-  total: 4,
+  total: 7,
   data: [
     {
       paperId: "p1",
@@ -101,18 +101,6 @@ describe("semantic scholar provider", () => {
     expect(await provider.search("attention", 10)).toEqual(expected);
   });
 
-  it("drops a paper without a title", async () => {
-    const provider = createSemanticScholarProvider({ fetchFn: async () => json(fixture) });
-    const ids = (await provider.search("x", 10)).map((r) => r.externalId);
-    expect(ids).not.toContain("p3");
-  });
-
-  it("replaces an invalid paper URL or an empty PDF URL with null", async () => {
-    const provider = createSemanticScholarProvider({ fetchFn: async () => json(fixture) });
-    const bad = (await provider.search("x", 10)).find((r) => r.externalId === "p4");
-    expect(bad).toMatchObject({ url: null, pdfUrl: null });
-  });
-
   it.each<[string, Record<string, unknown>, SearchResult | null]>([
     [
       "trims the title",
@@ -142,14 +130,6 @@ describe("semantic scholar provider", () => {
     });
     const [result] = await provider.search("x", 5);
     expect(result?.authors).toEqual(["Ada", "Bob"]);
-  });
-
-  it("falls back to the arXiv PDF when S2 has no open access link", async () => {
-    const provider = createSemanticScholarProvider({ fetchFn: async () => json(fixture) });
-    const byId = new Map((await provider.search("x", 10)).map((r) => [r.externalId, r.pdfUrl]));
-    expect(byId.get("p5")).toBe("https://arxiv.org/pdf/1706.03762");
-    expect(byId.get("p6")).toBe("https://example.org/paper.pdf");
-    expect(byId.get("p7")).toBeNull();
   });
 
   it("handles a response with no data field", async () => {

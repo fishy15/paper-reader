@@ -42,7 +42,7 @@ describe("shared schemas", () => {
   });
 
   it.each(["abstract", "year", "url"])("PaperMetadata requires %s to be sent, even as null", (field) => {
-    const { [field]: _omitted, ...without } = metadata as Record<string, unknown>;
+    const without = Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== field));
     expect(failedPaths(PaperMetadata.safeParse(without))).toEqual([field]);
   });
 

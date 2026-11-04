@@ -157,16 +157,32 @@ describe("papers routes", () => {
       externalId: "u1",
       pdfUrl: null,
     };
-    const paper = await saveOk(unusual);
-    const fetched = await (await app.request(`/api/papers/${paper.id}`)).json();
-    expect(fetched).toMatchObject(unusual);
-
-    const withAuthor = await saveOk({ ...unusual, externalId: "u2", authors: ["Zoë Müller", "李雷"] });
-    expect(withAuthor).toMatchObject({ authors: ["Zoë Müller", "李雷"] });
+    const authored = { ...unusual, externalId: "u2", authors: ["Zoë Müller", "李雷"] };
+    for (const input of [unusual, authored]) {
+      const expected = {
+        ...input,
+        id: expect.any(Number),
+        source: "search",
+        hasPdf: false,
+        summary: null,
+        createdAt: expect.stringMatching(ISO_UTC),
+      };
+      const saved = await saveOk(input);
+      expect(saved).toEqual(expected);
+      expect(await (await app.request(`/api/papers/${saved.id}`)).json()).toEqual(expected);
+      expect(await listPapers()).toContainEqual(expected);
+    }
   });
 
   describe("invalid input", () => {
-    const { abstract: _abstract, ...withoutAbstract } = sample;
+    const withoutAbstract = {
+      title: sample.title,
+      authors: sample.authors,
+      year: sample.year,
+      url: sample.url,
+      externalId: sample.externalId,
+      pdfUrl: sample.pdfUrl,
+    };
 
     it.each([
       ["a missing body", {}, "title"],
@@ -180,17 +196,18 @@ describe("papers routes", () => {
     ])("rejects %s with a 400 naming the field and saves nothing", async (_name, body, field) => {
       const res = await savePaper(body);
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: expect.stringMatching(new RegExp(`^Invalid request \\(.*${field}:`)) });
+      expect(await res.json()).toEqual({ error: expect.stringMatching(new RegExp(`^Invalid request \\((?:.*; )?${field}:`)) });
       expect(await listPapers()).toEqual([]);
     });
 
-    it.each(["abc", "0", "-1", "1.5"])("rejects id %s with a 400 for GET and DELETE", async (id) => {
-      for (const method of ["GET", "DELETE"]) {
+    it.each(["abc", "0", "-1", "1.5"].flatMap((id) => ["GET", "DELETE"].map((method) => [method, id] as const)))(
+      "rejects %s with id %s with a 400",
+      async (method, id) => {
         const res = await app.request(`/api/papers/${id}`, { method });
-        expect(res.status, `${method} ${id}`).toBe(400);
+        expect(res.status).toBe(400);
         expect(await res.json()).toEqual({ error: expect.stringContaining("Invalid request") });
-      }
-    });
+      },
+    );
 
     it.each(["GET", "DELETE"])("returns 404 for a missing paper on %s", async (method) => {
       const res = await app.request("/api/papers/999", { method });

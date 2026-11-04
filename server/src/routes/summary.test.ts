@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import type { Paper } from "@paper-reader/shared";
+import { z } from "zod";
+import { Paper } from "@paper-reader/shared";
 import { papers } from "../db/schema.js";
 import { LlmRateLimitError, type Llm } from "../services/llm.js";
 import { fakeLlm, makePdf, makeTestApp } from "../test-utils.js";
@@ -20,6 +21,10 @@ function insertSearchPaper(deps: TestApp["deps"], values: Partial<typeof papers.
   return insertPaper(deps, { source: "search", externalId: "s2-1", fullText: null, ...values });
 }
 
+async function errorOf(res: Response) {
+  return z.object({ error: z.string() }).parse(await res.json()).error;
+}
+
 const summarize = (app: TestApp["app"], id: number) => app.request(`/api/papers/${id}/summarize`, { method: "POST" });
 
 describe("POST /api/papers/:id/summarize", () => {
@@ -30,7 +35,7 @@ describe("POST /api/papers/:id/summarize", () => {
 
     const res = await summarize(app, id);
     expect(res.status).toBe(200);
-    expect(((await res.json()) as Paper).summary).toBe("Problem: it works.");
+    expect(Paper.parse(await res.json()).summary).toBe("Problem: it works.");
     expect(summarizeFn).toHaveBeenCalledWith({ title: "A Paper", text: "The full text." });
 
     const saved = await (await app.request(`/api/papers/${id}`)).json();
@@ -43,7 +48,7 @@ describe("POST /api/papers/:id/summarize", () => {
     const { id } = insertPaper(deps);
 
     await summarize(app, id);
-    expect(((await (await summarize(app, id)).json()) as Paper).summary).toBe("second");
+    expect(Paper.parse(await (await summarize(app, id)).json()).summary).toBe("second");
     expect(summarizeFn).toHaveBeenCalledTimes(2);
   });
 
@@ -70,7 +75,7 @@ describe("POST /api/papers/:id/summarize", () => {
 
     const res = await summarize(app, id);
     expect(res.status).toBe(422);
-    expect(((await res.json()) as { error: string }).error).toMatch(/Upload its PDF/);
+    expect((await errorOf(res))).toMatch(/Upload its PDF/);
     expect(summarizeFn).not.toHaveBeenCalled();
   });
 
@@ -92,7 +97,7 @@ describe("POST /api/papers/:id/summarize", () => {
 
     const res = await summarize(app, id);
     expect(res.status).toBe(status);
-    expect(((await res.json()) as { error: string }).error).toMatch(message);
+    expect((await errorOf(res))).toMatch(message);
     expect(summarizeFn).not.toHaveBeenCalled();
     expect(deps.db.select().from(papers).where(eq(papers.id, id)).get()?.fullText).toBeNull();
   });
@@ -140,7 +145,7 @@ describe("POST /api/papers/:id/summarize", () => {
 
     const retry = await summarize(app, id);
     expect(retry.status).toBe(200);
-    expect(((await retry.json()) as Paper).summary).toBe("A summary");
+    expect(Paper.parse(await retry.json()).summary).toBe("A summary");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -205,6 +210,6 @@ describe("POST /api/papers/:id/summarize", () => {
     const { app } = makeTestApp();
     const res = await app.request("/api/papers/abc/summarize", { method: "POST" });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/id/);
+    expect((await errorOf(res))).toMatch(/id/);
   });
 });

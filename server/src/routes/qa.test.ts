@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { QaMessage, QaStreamEvent } from "@paper-reader/shared";
 import { papers, qaMessages } from "../db/schema.js";
 import { LlmRateLimitError, type Llm } from "../services/llm.js";
@@ -34,7 +35,11 @@ async function readEvents(res: Response): Promise<QaStreamEvent[]> {
 
 async function messages(app: TestApp["app"], id: number) {
   const res = await app.request(`/api/papers/${id}/messages`);
-  return (await res.json()) as QaMessage[];
+  return z.array(QaMessage).parse(await res.json());
+}
+
+async function errorOf(res: Response) {
+  return z.object({ error: z.string() }).parse(await res.json()).error;
 }
 
 function answering(...chunks: string[]) {
@@ -68,25 +73,6 @@ describe("POST /api/papers/:id/ask", () => {
       { paperId: id, role: "user", content: "Why?" },
       { paperId: id, role: "assistant", content: "Because of X." },
     ]);
-  });
-
-  it("sends earlier messages as history, at most the most recent ones", async () => {
-    const answer = answering("ok");
-    const { app, deps } = makeTestApp({ llm: fakeLlm({ answer }) });
-    const { id } = insertPaper(deps);
-    const earlier = Array.from({ length: HISTORY_MESSAGES + 4 }, (_, i) => ({
-      paperId: id,
-      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
-      content: `message ${i}`,
-    }));
-    deps.db.insert(qaMessages).values(earlier).run();
-
-    await readEvents(await ask(app, id, { question: "And now?" }));
-
-    const input = answer.mock.calls[0]![0];
-    expect(input.history).toHaveLength(HISTORY_MESSAGES);
-    expect(input.history[0]).toEqual({ role: "user", content: "message 4" });
-    expect(input.history.at(-1)).toEqual({ role: "assistant", content: `message ${HISTORY_MESSAGES + 3}` });
   });
 
   it("trims the question before sending it to the model and saving it", async () => {
@@ -139,7 +125,7 @@ describe("POST /api/papers/:id/ask", () => {
 
     const res = await ask(app, id);
     expect(res.status).toBe(422);
-    expect(((await res.json()) as { error: string }).error).toMatch(/Upload its PDF/);
+    expect((await errorOf(res))).toMatch(/Upload its PDF/);
     expect(answer).not.toHaveBeenCalled();
   });
 
@@ -160,7 +146,7 @@ describe("POST /api/papers/:id/ask", () => {
       body: JSON.stringify({ question: "Why?" }),
     });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/id/);
+    expect((await errorOf(res))).toMatch(/id/);
   });
 
   it.each<[string, unknown]>([
@@ -174,7 +160,7 @@ describe("POST /api/papers/:id/ask", () => {
     const { id } = insertPaper(deps);
     const res = await ask(app, id, body);
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/question/);
+    expect((await errorOf(res))).toMatch(/question/);
   });
 
   it("accepts a question of exactly 4000 characters", async () => {
@@ -190,6 +176,7 @@ describe("POST /api/papers/:id/ask", () => {
     const { id } = insertPaper(deps);
     const res = await askRaw(app, id, { headers: { "content-type": "application/json" }, body: "{not json" });
     expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: expect.stringMatching(/malformed/i) });
   });
 
   it("rejects a request without a content-type, naming the question", async () => {
@@ -197,7 +184,7 @@ describe("POST /api/papers/:id/ask", () => {
     const { id } = insertPaper(deps);
     const res = await askRaw(app, id, { body: JSON.stringify({ question: "Why?" }) });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/question/);
+    expect((await errorOf(res))).toMatch(/question/);
   });
 
   it("saves an empty answer when the model returns nothing", async () => {
@@ -263,6 +250,7 @@ describe("POST /api/papers/:id/ask", () => {
     ["exactly the limit", HISTORY_MESSAGES, HISTORY_MESSAGES, 0],
     ["one over the limit", HISTORY_MESSAGES + 1, HISTORY_MESSAGES, 1],
     ["fewer than the limit", 3, 3, 0],
+    ["four over the limit", HISTORY_MESSAGES + 4, HISTORY_MESSAGES, 4],
   ])("sends %s as history", async (_name, stored, expectedLength, firstKept) => {
     const answer = answering("ok");
     const { app, deps } = makeTestApp({ llm: fakeLlm({ answer }) });
@@ -282,8 +270,8 @@ describe("POST /api/papers/:id/ask", () => {
 
     const { history } = answer.mock.calls[0]![0];
     expect(history).toHaveLength(expectedLength);
-    expect(history[0]!.content).toBe(`message ${firstKept}`);
-    expect(history.at(-1)!.content).toBe(`message ${stored - 1}`);
+    expect(history[0]).toEqual({ role: firstKept % 2 === 0 ? "user" : "assistant", content: `message ${firstKept}` });
+    expect(history.at(-1)).toEqual({ role: (stored - 1) % 2 === 0 ? "user" : "assistant", content: `message ${stored - 1}` });
   });
 
   it("returns a 500 error, opens no stream and saves nothing when the LLM fails before answering", async () => {
@@ -370,7 +358,7 @@ describe("POST /api/papers/:id/ask", () => {
 
       const res = await ask(app, id);
       expect(res.status).toBe(status);
-      expect(((await res.json()) as { error: string }).error).toMatch(message);
+      expect((await errorOf(res))).toMatch(message);
       expect(answer).not.toHaveBeenCalled();
       expect(await messages(app, id)).toEqual([]);
     });
@@ -420,7 +408,7 @@ describe("GET /api/papers/:id/messages", () => {
     const { app } = makeTestApp();
     const res = await app.request("/api/papers/abc/messages");
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toMatch(/id/);
+    expect((await errorOf(res))).toMatch(/id/);
   });
 
   it("returns messages with an id, the paper id, a role and an ISO timestamp", async () => {

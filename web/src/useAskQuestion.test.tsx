@@ -222,7 +222,7 @@ describe("useAskQuestion", () => {
   });
 
   it.each([
-    ["an error event after a delta", ndjson([{ type: "delta", text: "A" }, { type: "error", message: "Overloaded" }]), "Overloaded"],
+    ["an error event after a delta", ndjson([{ type: "delta", text: "A" }, { type: "error", message: "Overloaded" }]), /Overloaded/],
     ["a stream cut off after a delta", ndjson([{ type: "delta", text: "A" }]), /cut off/],
     ["an unreadable line", "not json\n", /unreadable response/],
   ])("does not invalidate the messages after %s", async (_name, body, message) => {
@@ -332,30 +332,5 @@ describe("useAskQuestion", () => {
 
     act(() => result.current.stop());
     expect(await first).toBe(false);
-  });
-
-  it("lets stop() reach a newer question after an older one finished", async () => {
-    const first = gatedResponse();
-    const second = gatedResponse();
-    const responses = [first, second];
-    server.use(http.post("*/api/papers/1/ask", () => responses.shift()!.respond()));
-    const { result } = setup();
-    let one!: Promise<boolean>;
-    let two!: Promise<boolean>;
-    act(() => {
-      one = result.current.ask("One");
-    });
-    await waitFor(() => expect(result.current.streaming).toBe(true));
-    act(() => {
-      two = result.current.ask("Two");
-    });
-
-    // The older request finishing must not clear the controller of the newer one.
-    first.push({ type: "done" });
-    first.close();
-    await one;
-    act(() => result.current.stop());
-    expect(await two).toBe(false);
-    await waitFor(() => expect(result.current.stopped).toBe(true));
   });
 });

@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { delay, http, HttpResponse } from "msw";
 import { Link, Route, Routes } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Paper } from "@paper-reader/shared";
+import type { Paper, QaMessage } from "@paper-reader/shared";
 import { makeMessage, makePaper } from "../test/fixtures.js";
 import { renderApp } from "../test/render.js";
 import { server } from "../test/server.js";
@@ -34,7 +34,7 @@ function renderWithLinks(route: string, ids: number[]) {
   );
 }
 
-function usePaper(paper: Paper, messages: ReturnType<typeof makeMessage>[] = []) {
+function servePaper(paper: Paper, messages: QaMessage[] = []) {
   server.use(
     http.get(`*/api/papers/${paper.id}`, () => HttpResponse.json(paper)),
     http.get(`*/api/papers/${paper.id}/messages`, () => HttpResponse.json(messages)),
@@ -62,7 +62,7 @@ describe("PaperPage", () => {
     { segment: "1e3", id: 1000 },
     { segment: "0x10", id: 16 },
   ])("accepts the id segment $segment as $id", async ({ segment, id }) => {
-    usePaper(makePaper({ id, title: `Paper ${id}` }));
+    servePaper(makePaper({ id, title: `Paper ${id}` }));
     const paths = recordRequests();
     renderAt(`/papers/${segment}`);
     expect(await screen.findByRole("heading", { name: /Paper/ })).toHaveTextContent(`Paper ${id}`);
@@ -72,10 +72,13 @@ describe("PaperPage", () => {
 
   it.each(["abc", "0", "-1", "1.5", "12abc", "%20", "Infinity", "1e400"])(
     "rejects the invalid id %s without any request",
-    (segment) => {
+    async (segment) => {
       const paths = recordRequests();
       renderAt(`/papers/${segment}`);
       expect(screen.getByText("Invalid paper id.")).toHaveClass("error");
+      // Requests are recorded asynchronously, so give one time to arrive. The accepted ids above show that
+      // `recordRequests` does see a request made by this page.
+      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(paths).toEqual([]);
     },
   );
@@ -95,7 +98,7 @@ describe("PaperPage", () => {
   });
 
   it("shows the title, year, authors and a link back to the library", async () => {
-    usePaper(makePaper({ id: 6, title: "Deep Paper", year: 2021, authors: ["A", "B"] }));
+    servePaper(makePaper({ id: 6, title: "Deep Paper", year: 2021, authors: ["A", "B"] }));
     renderAt("/papers/6");
     expect(await screen.findByRole("heading", { name: "Deep Paper (2021)" })).toBeInTheDocument();
     expect(screen.getByText("A, B")).toHaveClass("byline");
@@ -103,7 +106,7 @@ describe("PaperPage", () => {
   });
 
   it("links the PDF and Semantic Scholar page in a new tab", async () => {
-    usePaper(makePaper({ id: 6, url: "https://s2.example/p", pdfUrl: "https://x.example/p.pdf" }));
+    servePaper(makePaper({ id: 6, url: "https://s2.example/p", pdfUrl: "https://x.example/p.pdf" }));
     renderAt("/papers/6");
     const pdf = await screen.findByRole("link", { name: /PDF/ });
     expect(pdf).toHaveAttribute("href", "https://x.example/p.pdf");
@@ -116,7 +119,7 @@ describe("PaperPage", () => {
   });
 
   it("shows the chat for the paper", async () => {
-    usePaper(makePaper({ id: 6 }));
+    servePaper(makePaper({ id: 6 }));
     renderAt("/papers/6");
     expect(await screen.findByLabelText("Question about this paper")).toBeInTheDocument();
   });
@@ -130,10 +133,11 @@ describe("PaperPage", () => {
   ] satisfies { name: string; overrides: Partial<Paper>; byline: boolean; pdf: boolean; s2: boolean }[])(
     "hides what is missing: $name",
     async ({ overrides, byline, pdf, s2 }) => {
-      usePaper(makePaper({ id: 6, title: "Bare", ...overrides }));
+      servePaper(makePaper({ id: 6, title: "Bare", ...overrides }));
       const { container } = renderAt("/papers/6");
       const heading = await screen.findByRole("heading", { name: /Bare/ });
       if ("year" in overrides) expect(heading).toHaveTextContent(/^Bare$/);
+      // The byline has no role or accessible name, so a class query is the only option.
       expect(container.querySelector(".byline") !== null).toBe(byline);
       expect(screen.queryByRole("link", { name: /PDF/ }) !== null).toBe(pdf);
       expect(screen.queryByRole("link", { name: /Semantic Scholar/ }) !== null).toBe(s2);
@@ -141,13 +145,13 @@ describe("PaperPage", () => {
   );
 
   it("shows no stray 0 when the year is 0", async () => {
-    usePaper(makePaper({ id: 6, title: "Ancient", year: 0 }));
+    servePaper(makePaper({ id: 6, title: "Ancient", year: 0 }));
     renderAt("/papers/6");
     expect(await screen.findByRole("heading", { name: "Ancient" })).toHaveTextContent(/^Ancient$/);
   });
 
   it("notes a missing abstract", async () => {
-    usePaper(makePaper({ id: 3, abstract: null }));
+    servePaper(makePaper({ id: 3, abstract: null }));
     renderAt("/papers/3");
     expect(await screen.findByText("No abstract available.")).toBeInTheDocument();
   });
@@ -199,7 +203,7 @@ describe("PaperPage", () => {
   });
 
   it("shows an error when summarizing fails, and lets the user retry", async () => {
-    usePaper(makePaper({ id: 8, summary: "Old." }));
+    servePaper(makePaper({ id: 8, summary: "Old." }));
     server.use(http.post("*/api/papers/8/summarize", () => HttpResponse.json({ error: "No PDF link" }, { status: 422 })));
     const { user } = renderAt("/papers/8");
     await user.click(await screen.findByRole("button", { name: "Regenerate summary" }));
@@ -229,8 +233,8 @@ describe("PaperPage", () => {
   });
 
   it("does not carry a summarize error over to another paper", async () => {
-    usePaper(makePaper({ id: 1, title: "First" }));
-    usePaper(makePaper({ id: 2, title: "Second" }));
+    servePaper(makePaper({ id: 1, title: "First" }));
+    servePaper(makePaper({ id: 2, title: "Second" }));
     server.use(http.post("*/api/papers/1/summarize", () => HttpResponse.json({ error: "No PDF link" }, { status: 422 })));
     const { user } = renderWithLinks("/papers/1", [1, 2]);
     await user.click(await screen.findByRole("button", { name: "Summarize" }));
@@ -241,8 +245,8 @@ describe("PaperPage", () => {
   });
 
   it("does not carry a pending summarize over to another paper", async () => {
-    usePaper(makePaper({ id: 1, title: "First" }));
-    usePaper(makePaper({ id: 2, title: "Second" }));
+    servePaper(makePaper({ id: 1, title: "First" }));
+    servePaper(makePaper({ id: 2, title: "Second" }));
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     server.use(
@@ -265,8 +269,8 @@ describe("PaperPage", () => {
   });
 
   it("resets the chat when the id changes", async () => {
-    usePaper(makePaper({ id: 1, title: "First" }), [makeMessage({ id: 1, paperId: 1, content: "Only on one" })]);
-    usePaper(makePaper({ id: 2, title: "Second" }), [makeMessage({ id: 2, paperId: 2, content: "Only on two" })]);
+    servePaper(makePaper({ id: 1, title: "First" }), [makeMessage({ id: 1, paperId: 1, content: "Only on one" })]);
+    servePaper(makePaper({ id: 2, title: "Second" }), [makeMessage({ id: 2, paperId: 2, content: "Only on two" })]);
     const { user } = renderWithLinks("/papers/1", [1, 2]);
     await screen.findByText("Only on one");
     await user.type(screen.getByLabelText("Question about this paper"), "half a thought");

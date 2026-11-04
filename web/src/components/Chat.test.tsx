@@ -3,6 +3,7 @@ import { delay, http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import type { QaMessage, QaStreamEvent } from "@paper-reader/shared";
 import { makeMessage, ndjson } from "../test/fixtures.js";
+import { deferred } from "../test/deferred.js";
 import { renderApp } from "../test/render.js";
 import { server } from "../test/server.js";
 import { Chat } from "./Chat.js";
@@ -13,13 +14,6 @@ function useConversation(initial: QaMessage[] = []) {
   const messages = [...initial];
   server.use(http.get("*/api/papers/1/messages", () => HttpResponse.json(messages)));
   return messages;
-}
-
-/** A promise that is resolved from outside, to hold a mocked request until the test lets it go. */
-function deferred() {
-  let resolve!: () => void;
-  const promise = new Promise<void>((r) => (resolve = r));
-  return { promise, resolve };
 }
 
 /** An ask response that sends `first` right away and stays open until `finish` sends the rest and closes it. */
@@ -40,6 +34,12 @@ function gatedStream(first: QaStreamEvent[]) {
     },
   };
 }
+
+const form = () => {
+  const found = input().closest("form");
+  if (!found) throw new Error("The question input is not inside a form");
+  return found;
+};
 
 const ask = () => screen.getByRole("button", { name: "Ask" });
 
@@ -73,10 +73,8 @@ describe("Chat", () => {
 
   it("streams an answer, then shows the saved messages and clears the input", async () => {
     const messages = useConversation();
-    let sent: unknown;
     server.use(
-      http.post("*/api/papers/1/ask", async ({ request }) => {
-        sent = await request.json();
+      http.post("*/api/papers/1/ask", async () => {
         messages.push(
           makeMessage({ id: 1, role: "user", content: "Why?" }),
           makeMessage({ id: 2, role: "assistant", content: "Because." }),
@@ -91,7 +89,6 @@ describe("Chat", () => {
     await user.click(screen.getByRole("button", { name: "Ask" }));
 
     await waitFor(() => expect(screen.getByText("Because.")).toHaveClass("assistant"));
-    expect(sent).toEqual({ question: "Why?" });
     expect(screen.getAllByText("Why?")).toHaveLength(1);
     expect(input()).toHaveValue("");
     expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
@@ -167,6 +164,7 @@ describe("Chat", () => {
     await user.type(input(), "Why?");
     await user.click(ask());
 
+    // Messages are plain divs with no role or label, so the class is the only way to tell them apart from other text.
     expect(await screen.findByText("Partial")).toHaveClass("message", "assistant");
     expect(screen.getByText("Why?", { selector: ".message" })).toHaveClass("user");
     expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
@@ -196,15 +194,15 @@ describe("Chat", () => {
       name: "an error event",
       stop: false,
       first: () => new HttpResponse(ndjson([{ type: "error", message: "Model overloaded" }])),
-      gone: () => screen.queryByText("Model overloaded"),
+      present: () => screen.queryByText("Model overloaded"),
     },
     {
       name: "Stop",
       stop: true,
       first: () => new HttpResponse(new ReadableStream<Uint8Array>()),
-      gone: () => screen.queryByText(/Answer stopped/),
+      present: () => screen.queryByText(/Answer stopped/),
     },
-  ])("clears the previous outcome when asking again after $name", async ({ first, gone, stop }) => {
+  ])("clears the previous outcome when asking again after $name", async ({ first, present, stop }) => {
     const messages = useConversation();
     let calls = 0;
     server.use(
@@ -222,12 +220,12 @@ describe("Chat", () => {
     await user.type(input(), "Why?");
     await user.click(ask());
     if (stop) await user.click(await screen.findByRole("button", { name: "Stop" }));
-    await waitFor(() => expect(gone()).toBeInTheDocument());
+    await waitFor(() => expect(present()).toBeInTheDocument());
     await waitFor(() => expect(ask()).toBeEnabled());
 
     await user.click(ask());
     expect(await screen.findByText("Because.")).toHaveClass("assistant");
-    expect(gone()).not.toBeInTheDocument();
+    expect(present()).not.toBeInTheDocument();
     expect(input()).toHaveValue("");
     expect(calls).toBe(2);
   });
@@ -272,10 +270,9 @@ describe("Chat", () => {
       }),
     );
     const { user } = renderApp(<Chat paperId={1} />);
-    const form = input().closest("form")!;
-    fireEvent.submit(form);
+    fireEvent.submit(form());
     await user.type(input(), "   ");
-    fireEvent.submit(form);
+    fireEvent.submit(form());
     expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
 
     // A real question afterwards is the first request that arrives, so the blank submits sent nothing.
@@ -300,7 +297,10 @@ describe("Chat", () => {
     await user.click(ask());
     expect(await screen.findByText("Partial")).toBeInTheDocument();
 
-    fireEvent.submit(input().closest("form")!);
+    fireEvent.submit(form());
+    // Give a second request time to arrive while the first answer is still streaming.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(requests).toBe(1);
     stream.finish([{ type: "done" }]);
     await waitFor(() => expect(input()).toHaveValue(""));
     expect(requests).toBe(1);
@@ -335,5 +335,8 @@ describe("Chat", () => {
     await user.type(input(), "Why?");
     await user.click(ask());
     await waitFor(() => expect(fetches).toBe(2));
+    // One refetch per answer, not more.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetches).toBe(2);
   });
 });

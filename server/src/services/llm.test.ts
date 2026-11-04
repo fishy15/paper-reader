@@ -1,11 +1,28 @@
-import { ApiError, type GenerateContentResponse } from "@google/genai";
+import { ApiError, BlockedReason, FinishReason, type GenerateContentResponse } from "@google/genai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLlm, LlmRateLimitError, type GeminiClient, type Llm } from "./llm.js";
 
 const metadata = { title: "A Paper", authors: ["Ada Lovelace"], year: 2021, abstract: "We do things." };
 
-function fakeClient(respond: () => Promise<Partial<GenerateContentResponse>>) {
-  const generateContent = vi.fn(respond as GeminiClient["models"]["generateContent"]);
+/** The parts of a Gemini response these tests care about. */
+type FakeResponse = {
+  text?: string;
+  candidates?: { finishReason?: FinishReason }[];
+  promptFeedback?: { blockReason?: BlockedReason };
+};
+
+/** Builds a response from the given fields; the real class has read-only getters, so the fake is cast once here. */
+const fakeResponse = (fields: FakeResponse) => fields as GenerateContentResponse;
+
+/** The first argument of the first call to a mock, failing if it was never called. */
+function firstArg<A extends unknown[]>(mock: { mock: { calls: A[] } }): A[0] {
+  const call = mock.mock.calls[0];
+  if (!call) throw new Error("expected the mock to have been called");
+  return call[0];
+}
+
+function fakeClient(respond: () => Promise<FakeResponse>) {
+  const generateContent = vi.fn<GeminiClient["models"]["generateContent"]>(async () => fakeResponse(await respond()));
   const generateContentStream = vi.fn<GeminiClient["models"]["generateContentStream"]>(async () => {
     throw new Error("unexpected streaming call");
   });
@@ -13,12 +30,12 @@ function fakeClient(respond: () => Promise<Partial<GenerateContentResponse>>) {
 }
 
 /** A client whose streaming call yields the given chunks (an Error in the list is thrown at that point). */
-function fakeStreamClient(chunks: (Partial<GenerateContentResponse> | Error)[]) {
+function fakeStreamClient(chunks: (FakeResponse | Error)[]) {
   const generateContentStream = vi.fn<GeminiClient["models"]["generateContentStream"]>(async () =>
     (async function* () {
       for (const chunk of chunks) {
         if (chunk instanceof Error) throw chunk;
-        yield chunk as GenerateContentResponse;
+        yield fakeResponse(chunk);
       }
     })(),
   );
@@ -57,7 +74,7 @@ describe("gemini llm", () => {
     const { client, generateContent } = fakeClient(async () => ({ text: JSON.stringify(metadata) }));
     expect(await makeLlm(client).extractMetadata("Page one")).toEqual(metadata);
 
-    const params = generateContent.mock.calls[0]![0];
+    const params = firstArg(generateContent);
     expect(params.model).toBe("test-model");
     expect(params.contents).toContain("Page one");
     expect(params.config).toMatchObject({ responseMimeType: "application/json" });
@@ -87,7 +104,7 @@ describe("gemini llm", () => {
     const { client, generateContent } = fakeClient(async () => ({ text: "  Problem: x\n" }));
 
     expect(await makeLlm(client).summarize({ title: "A Paper", text: "Full body" })).toBe("Problem: x");
-    const params = generateContent.mock.calls[0]![0];
+    const params = firstArg(generateContent);
     expect(params.contents).toContain("Title: A Paper");
     expect(params.contents).toContain("<paper_text>\nFull body\n</paper_text>");
     expect(params.config?.responseMimeType).toBeUndefined();
@@ -100,7 +117,7 @@ describe("gemini llm", () => {
   });
 
   it("treats a whitespace-only response as no content", async () => {
-    const { client } = fakeClient(async () => ({ text: " \n  ", candidates: [{ finishReason: "STOP" as never }] }));
+    const { client } = fakeClient(async () => ({ text: " \n  ", candidates: [{ finishReason: FinishReason.STOP }] }));
     await expect(makeLlm(client).summarize(summaryInput)).rejects.toThrow(/no content.*STOP/);
   });
 
@@ -167,8 +184,8 @@ describe("gemini llm", () => {
     }
   });
 
-  it.each<[string, Partial<GenerateContentResponse>, RegExp]>([
-    ["a blocked prompt", { promptFeedback: { blockReason: "SAFETY" as never } }, /declined.*SAFETY/],
+  it.each<[string, FakeResponse, RegExp]>([
+    ["a blocked prompt", { promptFeedback: { blockReason: BlockedReason.SAFETY } }, /declined.*SAFETY/],
     ["an empty response", { text: "" }, /no content/],
     ["bad JSON", { text: "not json" }, /invalid JSON/],
     ["a schema mismatch", { text: JSON.stringify({ title: "Only a title" }) }, /expected format/],
@@ -178,7 +195,7 @@ describe("gemini llm", () => {
   });
 
   it("names the finish reason of an empty response, or 'unknown' without one", async () => {
-    const withReason = fakeClient(async () => ({ text: "", candidates: [{ finishReason: "MAX_TOKENS" as never }] }));
+    const withReason = fakeClient(async () => ({ text: "", candidates: [{ finishReason: FinishReason.MAX_TOKENS }] }));
     await expect(makeLlm(withReason.client).summarize(summaryInput)).rejects.toThrow(/no content.*MAX_TOKENS/);
 
     const withoutReason = fakeClient(async () => ({ text: "" }));
@@ -191,7 +208,7 @@ describe("gemini llm", () => {
   ])("tells the model that the paper text from %s is untrusted", async (_name, call) => {
     const { client, generateContent } = fakeClient(async () => ({ text: JSON.stringify(metadata) }));
     await call(makeLlm(client));
-    const params = generateContent.mock.calls[0]![0];
+    const params = firstArg(generateContent);
     expect(params.config?.systemInstruction).toContain("untrusted");
     expect(params.contents).toContain("<paper_text>\nPage one\n</paper_text>");
   });
@@ -207,7 +224,7 @@ describe("gemini llm answer", () => {
 
     expect(await collect(makeLlm(client).answer(question({ history })))).toEqual(["Because ", "of X."]);
 
-    const params = generateContentStream.mock.calls[0]![0];
+    const params = firstArg(generateContentStream);
     expect(params.contents).toEqual([
       { role: "user", parts: [{ text: "What is it?" }] },
       { role: "model", parts: [{ text: "A method." }] },
@@ -222,7 +239,7 @@ describe("gemini llm answer", () => {
     const { client, generateContentStream } = fakeStreamClient([{ text: "ok" }]);
     await collect(makeLlm(client).answer(question({ text: "SECRET BODY" })));
 
-    const params = generateContentStream.mock.calls[0]![0];
+    const params = firstArg(generateContentStream);
     const system = params.config?.systemInstruction as string;
     expect(system).toContain("untrusted");
     expect(system).toContain("<paper_text>\nSECRET BODY\n</paper_text>");
@@ -230,7 +247,7 @@ describe("gemini llm answer", () => {
   });
 
   it("skips chunks without text", async () => {
-    const { client } = fakeStreamClient([{ text: "" }, { text: "Hi" }, { candidates: [{ finishReason: "STOP" as never }] }]);
+    const { client } = fakeStreamClient([{ text: "" }, { text: "Hi" }, { candidates: [{ finishReason: FinishReason.STOP }] }]);
     expect(await collect(makeLlm(client).answer(question()))).toEqual(["Hi"]);
   });
 
@@ -240,7 +257,7 @@ describe("gemini llm answer", () => {
     generateContentStream.mockImplementationOnce(async () => {
       order.push("request");
       return (async function* () {
-        yield { text: "Hi" } as GenerateContentResponse;
+        yield fakeResponse({ text: "Hi" });
       })();
     });
     const llm = makeLlm(client, async () => void order.push("acquire"));
@@ -293,15 +310,15 @@ describe("gemini llm answer", () => {
   });
 
   it("reports blocked prompts and empty streams", async () => {
-    const blocked = fakeStreamClient([{ promptFeedback: { blockReason: "SAFETY" as never } }]);
+    const blocked = fakeStreamClient([{ promptFeedback: { blockReason: BlockedReason.SAFETY } }]);
     await expect(collect(makeLlm(blocked.client).answer(question()))).rejects.toThrow(/declined.*SAFETY/);
 
-    const empty = fakeStreamClient([{ candidates: [{ finishReason: "MAX_TOKENS" as never }] }]);
+    const empty = fakeStreamClient([{ candidates: [{ finishReason: FinishReason.MAX_TOKENS }] }]);
     await expect(collect(makeLlm(empty.client).answer(question()))).rejects.toThrow(/no content.*MAX_TOKENS/);
   });
 
   it("delivers the text that came before a block in the middle of the stream", async () => {
-    const { client } = fakeStreamClient([{ text: "Some text" }, { promptFeedback: { blockReason: "SAFETY" as never } }]);
+    const { client } = fakeStreamClient([{ text: "Some text" }, { promptFeedback: { blockReason: BlockedReason.SAFETY } }]);
     const received: string[] = [];
     await expect(
       (async () => {
@@ -312,7 +329,7 @@ describe("gemini llm answer", () => {
   });
 
   it("keeps the finish reason from an earlier chunk when later chunks have none", async () => {
-    const { client } = fakeStreamClient([{ candidates: [{ finishReason: "SAFETY" as never }] }, { candidates: [] }, {}]);
+    const { client } = fakeStreamClient([{ candidates: [{ finishReason: FinishReason.SAFETY }] }, { candidates: [] }, {}]);
     await expect(collect(makeLlm(client).answer(question()))).rejects.toThrow(/no content.*SAFETY/);
   });
 
@@ -329,7 +346,7 @@ describe("gemini llm answer", () => {
         try {
           while (true) {
             requested++;
-            yield { text: `chunk ${requested}` } as GenerateContentResponse;
+            yield fakeResponse({ text: `chunk ${requested}` });
           }
         } finally {
           closed = true;

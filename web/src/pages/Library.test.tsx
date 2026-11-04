@@ -8,7 +8,7 @@ import { server } from "../test/server.js";
 import { Library } from "./Library.js";
 
 /** Serves the library and counts the `GET /api/papers` requests it receives. */
-function useLibrary(initial: Paper[]) {
+function serveLibrary(initial: Paper[]) {
   const papers = [...initial];
   const requests = { list: 0 };
   server.use(
@@ -20,23 +20,28 @@ function useLibrary(initial: Paper[]) {
   return Object.assign(papers, { requests });
 }
 
-const card = (title: RegExp) => screen.getByRole("heading", { name: title }).closest("article")!;
+function card(title: RegExp): HTMLElement {
+  const article = screen.getByRole("heading", { name: title }).closest("article");
+  if (!article) throw new Error(`No <article> card found for heading ${title}`);
+  return article;
+}
 
 describe("Library", () => {
   it("shows a loading state, then an empty-library message", async () => {
-    useLibrary([]);
+    serveLibrary([]);
     renderApp(<Library />);
     expect(screen.getByText("Loading…")).toBeInTheDocument();
     expect(await screen.findByText(/Your library is empty/)).toBeInTheDocument();
   });
 
   it("lists papers with a link to each and a badge for uploads", async () => {
-    useLibrary([
+    serveLibrary([
       makePaper({ id: 4, title: "Uploaded One", source: "upload" }),
       makePaper({ id: 9, title: "Searched Two", source: "search", externalId: "e2" }),
     ]);
     renderApp(<Library />);
-    const uploaded = (await screen.findByRole("heading", { name: /Uploaded One/ })).closest("article")!;
+    await screen.findByRole("heading", { name: /Uploaded One/ });
+    const uploaded = card(/Uploaded One/);
     expect(within(uploaded).getByText("uploaded")).toBeInTheDocument();
     expect(within(uploaded).getByRole("link", { name: "More Info" })).toHaveAttribute("href", "/papers/4");
     const searched = card(/Searched Two/);
@@ -47,6 +52,7 @@ describe("Library", () => {
   it("shows an error when the library can't be loaded", async () => {
     server.use(http.get("*/api/papers", () => HttpResponse.json({ error: "Database down" }, { status: 500 })));
     renderApp(<Library />);
+    // The `error` class is the only hook: the paragraph has no role.
     expect(await screen.findByText("Database down")).toHaveClass("error");
   });
 
@@ -59,21 +65,21 @@ describe("Library", () => {
   });
 
   it("shows the upload control while loading, when empty, and after a load error", async () => {
-    useLibrary([]);
+    serveLibrary([]);
     const first = renderApp(<Library />);
-    expect(screen.getByText("Choose file")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose file" })).toBeInTheDocument();
     await screen.findByText(/Your library is empty/);
-    expect(screen.getByText("Choose file")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose file" })).toBeInTheDocument();
     first.unmount();
 
     server.use(http.get("*/api/papers", () => HttpResponse.json({ error: "Database down" }, { status: 500 })));
     renderApp(<Library />);
     await screen.findByText("Database down");
-    expect(screen.getByText("Choose file")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose file" })).toBeInTheDocument();
   });
 
   it("deletes a paper after confirmation and refreshes the list", async () => {
-    const papers = useLibrary([makePaper({ id: 7, title: "Doomed" })]);
+    const papers = serveLibrary([makePaper({ id: 7, title: "Doomed" })]);
     server.use(
       http.delete("*/api/papers/7", () => {
         papers.length = 0;
@@ -90,7 +96,7 @@ describe("Library", () => {
   });
 
   it("deletes only the chosen paper", async () => {
-    const papers = useLibrary([makePaper({ id: 7, title: "Keeper" }), makePaper({ id: 12, title: "Goner" })]);
+    const papers = serveLibrary([makePaper({ id: 7, title: "Keeper" }), makePaper({ id: 12, title: "Goner" })]);
     const deleted: string[] = [];
     server.use(
       http.delete("*/api/papers/:id", ({ params }) => {
@@ -110,7 +116,7 @@ describe("Library", () => {
   });
 
   it("disables every Delete button while a delete is pending", async () => {
-    const papers = useLibrary([makePaper({ id: 7, title: "One" }), makePaper({ id: 12, title: "Two" })]);
+    const papers = serveLibrary([makePaper({ id: 7, title: "One" }), makePaper({ id: 12, title: "Two" })]);
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     server.use(
@@ -135,7 +141,7 @@ describe("Library", () => {
   });
 
   it("drops the deleted paper's cached detail and messages", async () => {
-    const papers = useLibrary([makePaper({ id: 7, title: "Doomed" }), makePaper({ id: 12, title: "Other" })]);
+    const papers = serveLibrary([makePaper({ id: 7, title: "Doomed" }), makePaper({ id: 12, title: "Other" })]);
     server.use(
       http.delete("*/api/papers/7", () => {
         papers.splice(0, 1);
@@ -159,7 +165,7 @@ describe("Library", () => {
   });
 
   it("does nothing when the confirmation is declined", async () => {
-    const papers = useLibrary([makePaper({ id: 5, title: "Safe" })]);
+    const papers = serveLibrary([makePaper({ id: 5, title: "Safe" })]);
     let deleted = false;
     server.use(http.delete("*/api/papers/5", () => ((deleted = true), HttpResponse.json({ ok: true }))));
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -172,18 +178,19 @@ describe("Library", () => {
   });
 
   it("shows an error when deleting fails and keeps the paper", async () => {
-    useLibrary([makePaper({ id: 5, title: "Stays" })]);
+    serveLibrary([makePaper({ id: 5, title: "Stays" })]);
     server.use(http.delete("*/api/papers/5", () => HttpResponse.json({ error: "Cannot delete" }, { status: 500 })));
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { user } = renderApp(<Library />);
     await user.click(await screen.findByRole("button", { name: "Delete" }));
+    // The `error` class is the only hook: the paragraph has no role.
     expect(await screen.findByText("Cannot delete")).toHaveClass("error");
     await waitFor(() => expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled());
     expect(screen.getByRole("heading", { name: /Stays/ })).toBeInTheDocument();
   });
 
   it("clears the delete error after a later successful delete", async () => {
-    const papers = useLibrary([makePaper({ id: 5, title: "Stubborn" })]);
+    const papers = serveLibrary([makePaper({ id: 5, title: "Stubborn" })]);
     let attempts = 0;
     server.use(
       http.delete("*/api/papers/5", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDb, IN_MEMORY_DB, type Db } from "./client.js";
 import { papers, qaMessages } from "./schema.js";
@@ -26,6 +26,12 @@ describe("toIsoUtc", () => {
   });
 
   it.each(["papers", "qa_messages"] as const)("converts the real %s.created_at default to the current instant", (table) => {
+    // A column default of datetime('now', 'localtime') is only off by the machine's UTC offset, so pin a
+    // non-UTC zone; on a UTC machine that mistake would otherwise pass the closeness check below.
+    vi.stubEnv("TZ", "Asia/Tokyo");
+    onTestFinished(() => {
+      vi.unstubAllEnvs();
+    });
     const db = createDb(IN_MEMORY_DB);
     const iso = toIsoUtc(defaultCreatedAt(db, table));
     expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
