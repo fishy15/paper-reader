@@ -47,5 +47,10 @@ export async function loadFullText(db: Db, row: PaperRow): Promise<string> {
 
 /** Cuts text that is too long for one request and marks the cut for the model. */
 export function limitPaperText(text: string): string {
-  return text.length > MAX_PAPER_CHARS ? `${text.slice(0, MAX_PAPER_CHARS)}\n\n[Text truncated]` : text;
+  if (text.length <= MAX_PAPER_CHARS) return text;
+  let end = MAX_PAPER_CHARS;
+  const last = text.charCodeAt(end - 1);
+  // Don't leave half of a surrogate pair at the cut.
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return `${text.slice(0, end)}\n\n[Text truncated]`;
 }

@@ -23,7 +23,10 @@ export function Search() {
 
   function onSubmit(e: SubmitEvent) {
     e.preventDefault();
-    setSubmitted(input.trim());
+    const query = input.trim();
+    save.reset();
+    if (query !== "" && query === submitted) void results.refetch();
+    else setSubmitted(query);
   }
 
   return (

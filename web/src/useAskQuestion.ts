@@ -24,6 +24,8 @@ export function useAskQuestion(paperId: number) {
 
   /** Resolves to true once the answer is complete and saved. */
   async function ask(question: string): Promise<boolean> {
+    // One answer at a time; the ref is checked (not state) so two calls in the same tick cannot both pass.
+    if (controller.current) return false;
     const abort = new AbortController();
     controller.current = abort;
     setError(null);
@@ -50,7 +52,7 @@ export function useAskQuestion(paperId: number) {
     } finally {
       // Whatever happened, the turn is over: it is either saved (and now in the messages) or dropped.
       setTurn(null);
-      if (controller.current === abort) controller.current = null;
+      controller.current = null;
       setStreaming(false);
     }
   }

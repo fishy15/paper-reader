@@ -16,7 +16,7 @@ export function PaperCard({ paper, badge, leading, children }: PaperCardProps) {
     <article className="card">
       <h3>
         {paper.title}
-        {paper.year && ` (${paper.year})`}
+        {paper.year ? ` (${paper.year})` : null}
         {badge && <span className="badge">{badge}</span>}
       </h3>
       {byline && <p className="byline">{byline}</p>}

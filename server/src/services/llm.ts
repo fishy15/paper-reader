@@ -133,7 +133,7 @@ export function createLlm({
     }
 
     assertNotBlocked(response);
-    if (!response.text) {
+    if (!response.text?.trim()) {
       const reason = response.candidates?.[0]?.finishReason ?? "unknown";
       throw new Error(`Gemini returned no content (finish reason: ${reason})`);
     }

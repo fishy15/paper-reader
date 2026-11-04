@@ -51,7 +51,7 @@ function toSearchResult(paper: z.infer<typeof S2Paper>): SearchResult | null {
   return {
     externalId: paper.paperId,
     title,
-    authors: paper.authors.flatMap((a) => (a.name ? [a.name] : [])),
+    authors: paper.authors.flatMap((a) => (a.name?.trim() ? [a.name.trim()] : [])),
     year: paper.year ?? null,
     abstract: paper.abstract?.trim() || null,
     url: validUrl(paper.url),
@@ -99,7 +99,13 @@ export function createSemanticScholarProvider(
         throw new SearchProviderError(`Semantic Scholar returned ${res.status}`, 502);
       }
 
-      const parsed = S2Response.safeParse(await res.json());
+      let body: unknown;
+      try {
+        body = await res.json();
+      } catch {
+        throw new SearchProviderError("Unexpected response from Semantic Scholar", 502);
+      }
+      const parsed = S2Response.safeParse(body);
       if (!parsed.success) {
         throw new SearchProviderError("Unexpected response from Semantic Scholar", 502);
       }

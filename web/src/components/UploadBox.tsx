@@ -4,11 +4,15 @@ import { useUploadPaper } from "../queries.js";
 export function UploadBox() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const upload = useUploadPaper();
 
   function pick(files: FileList | null) {
+    if (upload.isPending) return;
     const file = files?.[0];
-    if (file) upload.mutate(file);
+    if (!file) return;
+    setNotice(files.length > 1 ? `Only ${file.name} was uploaded` : null);
+    upload.mutate(file);
   }
 
   return (
@@ -43,6 +47,7 @@ export function UploadBox() {
           e.target.value = "";
         }}
       />
+      {notice && <p className="muted">{notice}</p>}
       {upload.error && <p className="error">{upload.error.message}</p>}
     </div>
   );

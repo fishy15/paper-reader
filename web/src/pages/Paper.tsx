@@ -5,7 +5,7 @@ import { usePaper, useSummarizePaper } from "../queries.js";
 export function PaperPage() {
   const id = Number(useParams().id);
   if (!Number.isInteger(id) || id <= 0) return <p className="error">Invalid paper id.</p>;
-  return <PaperDetail id={id} />;
+  return <PaperDetail key={id} id={id} />;
 }
 
 function PaperDetail({ id }: { id: number }) {
@@ -24,7 +24,7 @@ function PaperDetail({ id }: { id: number }) {
       </p>
       <h2>
         {data.title}
-        {data.year && ` (${data.year})`}
+        {data.year ? ` (${data.year})` : null}
       </h2>
       {byline && <p className="byline">{byline}</p>}
       <div className="actions">

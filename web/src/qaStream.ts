@@ -1,4 +1,5 @@
 import { QaStreamEvent } from "@paper-reader/shared";
+import { ApiError } from "./api.js";
 
 function parseEvent(line: string): QaStreamEvent {
   try {
@@ -29,7 +30,14 @@ export async function* readQaEvents(body: ReadableStream<Uint8Array>): AsyncGene
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (err) {
+        if ((err as { name?: unknown } | null)?.name === "AbortError") throw err;
+        throw new ApiError("The connection was lost before the answer finished");
+      }
+      const { done, value } = chunk;
       if (done) break;
       // `stream: true` keeps a multi-byte character that is split across chunks intact.
       buffer += decoder.decode(value, { stream: true });

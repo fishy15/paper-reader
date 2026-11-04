@@ -26,7 +26,7 @@ Paths are relative to `server/src` or `web/src`.
 | `server/services/semanticScholar.ts:99` | An upstream non-OK status other than 429 maps to 502. Only the 429 case is tested.                                                                |
 | `web/components/UploadBox.tsx:33`   | Clicking "Choose file" to open the picker. Tests use `user.upload` and drop events, so this `onClick` never runs.                                     |
 | `web/useAskQuestion.ts:48`          | The request fails with something that isn't an `Error`, so `String(err)` is used.                                                                     |
-| `web/useAskQuestion.ts:53`          | A newer question replaces `controller.current`, so the old request must not clear it. This is a race. Planned fix and test: see the `useAskQuestion.test.tsx` section.                                                 |
+| `web/useAskQuestion.ts:53`          | A newer question replaces `controller.current`, so the old request must not clear it. This is a race. No test: the planned fix removes this branch (see the `useAskQuestion.test.tsx` section).                           |
 | `web/components/Chat.tsx:17`        | The submit guard (`!question \|\| streaming`). The UI can't reach it (Ask is disabled for blank input, and the button is Stop while streaming), so drive it with `fireEvent.submit`. Planned: see the `Chat.test.tsx` section. |
 | `web/pages/Search.tsx:53`           | A save in flight for a different paper must not disable this paper's Save button.                                                                     |
 | `server/services/rateLimiter.ts:12` | The default real clock (`Date.now`, `setTimeout`). Every test injects a fake clock. Now planned: see the `rateLimiter.test.ts` section. |
@@ -285,8 +285,10 @@ The file has nine tests. The cleanup when the database insert fails after the fi
   become null, `1000` and next year are kept, the year after next, `2021.5` and `NaN` become null. The upper
   bound depends on today, so fix the clock with `vi.setSystemTime`.
 - Title fallbacks, in one `it.each` table. Only `my-notes.pdf` is tested. Add `UPPER.PDF` giving `UPPER` (the
-  regex is case-insensitive), and `.pdf` and an empty name giving `Untitled`. Also pad an author name in the
-  first test (`"  Ada Lovelace "`) to check trimming.
+  regex is case-insensitive), and `.pdf` giving `Untitled`. An empty filename never reaches the fallback: the
+  multipart parser returns such a file as a plain string, so the route answers 400 (`file: expected File,
+  received string`). Pin that 400 in its own test. Also pad an author name in the first test
+  (`"  Ada Lovelace "`) to check trimming.
 - Metadata input is capped at 12,000 characters. The test checks the 2-page limit but not
   `METADATA_MAX_CHARS`. Upload a page with more than 12,000 characters and assert the string sent to
   `extractMetadata` is at most 12,000.
@@ -479,6 +481,10 @@ are changed, which needs approval first.
 verifies the default: a changed format (for example `datetime('subsec')`) now throws at the read, in
 addition to failing the shape assertion.
 
+Not written yet: the type-level `@ts-expect-error` checks and the `parseSqliteTimestamp` constructor tests
+above. `SqliteTimestamp` and `parseSqliteTimestamp` don't exist, and importing them would break `tsc`. They
+wait for the source change.
+
 Skipped on purpose:
 - Year and midnight boundaries. It is a string replace with no date arithmetic.
 - Only the first space being replaced. It would pin behavior for input that can't occur.
@@ -566,7 +572,7 @@ The file has eight tests. Two ideas from the `summary.test.ts` review are alread
 - `limitPaperText` truncation: assert `toBe("x".repeat(MAX_PAPER_CHARS) + "\n\n[Text truncated]")` instead of
   `length < MAX_PAPER_CHARS + 50`, which would let a changed marker through.
 - Check messages, not just statuses: `/Upload its PDF/` for the no-link case, `/returned 500/` for the 502,
-  and `/Could not read/` for the unparseable PDF (which today can't be told apart from "No text found").
+  and `/Could not read/` for the unparseable PDF (distinct from the "No text found" message, `paperText.ts:39` vs `:42`).
 - Replace `.catch((e) => e)` with `await expect(...).rejects.toMatchObject({ status: 422, message:
   expect.stringMatching(...) })`. The `.catch` result is untyped.
 - Each test hand-wraps `try/finally` around `stubFetch`. Use `vi.unstubAllGlobals()` in an `afterEach`, or
@@ -1075,8 +1081,11 @@ is changed, which needs approval first.
   results, hold the POST for the first: its button is disabled and the second stays enabled. Then release.
 - The "Searching…" indicator. A delayed search response shows "Searching…", which disappears when the results
   arrive. Nothing tests it.
-- A blank query can't search even when submitted directly. Ask is disabled, but the form's `onSubmit` is the only
-  other guard. Use `fireEvent.submit` with a blank input and assert no request.
+- A blank query can't search even when submitted directly. Ask is disabled, but the real guard is
+  `enabled: submitted !== ""` on the query (`onSubmit` only sets `submitted` to the trimmed input). Use
+  `fireEvent.submit` with a blank input, then run a real search and assert it is the only request that
+  arrives. Checking the request count right after the submit can't fail, because requests are recorded
+  asynchronously.
 - A new search replaces the old error and results. Fail a search, then search for something else that
   succeeds. The error is gone and the new results show.
 - A library load failure doesn't break search. A 500 from `/api/papers` still shows results with enabled Save
@@ -1160,7 +1169,8 @@ changed, which needs approval first.
 - A second `ask` while one is in flight is ignored. With the first request pending, calling `ask` again returns
   `false`, sends no second request, and leaves the first unaffected (still streaming, with its turn). This also
   removes the need for the `controller.current === abort` race branch (`useAskQuestion.ts:53`, in the coverage
-  gaps).
+  gaps). There is deliberately no test for that branch: a test that starts overlapping asks would break once
+  this change lands, so the one that existed was deleted. The branch has no test until then.
 
 **Tests that pass today**
 
