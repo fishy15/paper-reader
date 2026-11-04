@@ -2,17 +2,14 @@ import { hc } from "hono/client";
 import { z } from "zod";
 import type { AppType } from "@paper-reader/server/app";
 import type { QaStreamEvent, SearchResult } from "@paper-reader/shared";
+import { ApiError, isAbort } from "./apiError.js";
 import { readQaEvents } from "./qaStream.js";
+
+export { ApiError };
 
 const client = hc<AppType>("/");
 
-export class ApiError extends Error {}
-
 const ErrorBody = z.object({ error: z.string().min(1) });
-
-function isAbort(err: unknown): boolean {
-  return (err as { name?: unknown } | null)?.name === "AbortError";
-}
 
 /** Runs a request, turning a network failure into an `ApiError`. Aborts pass through unchanged. */
 async function send<T>(request: Promise<T>): Promise<T> {

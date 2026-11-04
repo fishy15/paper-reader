@@ -1,5 +1,12 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, customType, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { parseSqliteTimestamp, type SqliteTimestamp } from "./time.js";
+
+/** `text` column holding a SQLite timestamp; every value read goes through `parseSqliteTimestamp`. */
+const sqliteTimestamp = customType<{ data: SqliteTimestamp; driverData: string }>({
+  dataType: () => "text",
+  fromDriver: parseSqliteTimestamp,
+});
 
 export const papers = sqliteTable(
   "papers",
@@ -16,7 +23,7 @@ export const papers = sqliteTable(
     localPdfPath: text("local_pdf_path"),
     fullText: text("full_text"),
     summary: text("summary"),
-    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    createdAt: sqliteTimestamp("created_at").notNull().default(sql`(datetime('now'))`),
   },
   (t) => [
     check(
@@ -35,7 +42,7 @@ export const qaMessages = sqliteTable(
       .references(() => papers.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["user", "assistant"] }).notNull(),
     content: text("content").notNull(),
-    createdAt: text("created_at").notNull().default(sql`(datetime('now'))`),
+    createdAt: sqliteTimestamp("created_at").notNull().default(sql`(datetime('now'))`),
   },
   (t) => [index("qa_messages_paper_id_idx").on(t.paperId)],
 );

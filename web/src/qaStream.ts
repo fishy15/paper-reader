@@ -1,5 +1,5 @@
 import { QaStreamEvent } from "@paper-reader/shared";
-import { ApiError } from "./api.js";
+import { ApiError, isAbort } from "./apiError.js";
 
 function parseEvent(line: string): QaStreamEvent {
   try {
@@ -34,7 +34,7 @@ export async function* readQaEvents(body: ReadableStream<Uint8Array>): AsyncGene
       try {
         chunk = await reader.read();
       } catch (err) {
-        if ((err as { name?: unknown } | null)?.name === "AbortError") throw err;
+        if (isAbort(err)) throw err;
         throw new ApiError("The connection was lost before the answer finished");
       }
       const { done, value } = chunk;
