@@ -203,7 +203,9 @@ describe("POST /api/papers/:id/summarize", () => {
 
   it("returns 404 for a missing paper", async () => {
     const { app } = makeTestApp();
-    expect((await summarize(app, 999)).status).toBe(404);
+    const res = await summarize(app, 999);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Paper not found" });
   });
 
   it("returns 400 for a bad id", async () => {

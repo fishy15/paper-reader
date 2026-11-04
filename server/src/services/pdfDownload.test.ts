@@ -59,6 +59,8 @@ describe("downloadPdf", () => {
     ["not a URL", "not a url"],
     ["a file URL", "file:///etc/passwd"],
     ["an ftp URL", "ftp://example.org/a.pdf"],
+    ["a scheme ending in http", "xhttp://example.org/a.pdf"],
+    ["a scheme starting with https", "https-foo://example.org/a.pdf"],
   ])("rejects %s without fetching", async (_name, url) => {
     const fetchFn = vi.fn<typeof fetch>();
     await expect(downloadPdf(url, { fetchFn })).rejects.toThrow(/not an http\(s\) URL/);

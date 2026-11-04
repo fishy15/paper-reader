@@ -96,7 +96,7 @@ describe("rate limiter", () => {
 
   // Planned change (see "Rate limiter" in ISSUES.md): the invalid rows fail until the input is checked.
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])("rejects %s requests per minute", (rpm) => {
-    expect(() => createRateLimiter(rpm, fakeClock().clock)).toThrow(RangeError);
+    expect(() => createRateLimiter(rpm, fakeClock().clock)).toThrow(new RangeError(`requestsPerMinute must be a finite number greater than 0, got ${rpm}`));
   });
 
   it("accepts fewer than one request per minute", async () => {

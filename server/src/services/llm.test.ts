@@ -2,6 +2,12 @@ import { ApiError, BlockedReason, FinishReason, type GenerateContentResponse } f
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLlm, LlmRateLimitError, type GeminiClient, type Llm } from "./llm.js";
 
+const genAiConstructor = vi.hoisted(() => vi.fn());
+vi.mock("@google/genai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@google/genai")>()),
+  GoogleGenAI: genAiConstructor,
+}));
+
 const metadata = { title: "A Paper", authors: ["Ada Lovelace"], year: 2021, abstract: "We do things." };
 
 /** The parts of a Gemini response these tests care about. */
@@ -119,6 +125,27 @@ describe("gemini llm", () => {
   it("treats a whitespace-only response as no content", async () => {
     const { client } = fakeClient(async () => ({ text: " \n  ", candidates: [{ finishReason: FinishReason.STOP }] }));
     await expect(makeLlm(client).summarize(summaryInput)).rejects.toThrow(/no content.*STOP/);
+  });
+
+  it("reports an unknown finish reason when the response has no text or candidates", async () => {
+    const { client } = fakeClient(async () => ({ candidates: [] }));
+    await expect(makeLlm(client).summarize(summaryInput)).rejects.toThrow(
+      "Gemini returned no content (finish reason: unknown)",
+    );
+  });
+
+  it("builds the Gemini client from the API key on first use and reuses it", async () => {
+    const generateContent = vi.fn(async () => fakeResponse({ text: "ok" }));
+    genAiConstructor.mockImplementation(function () {
+      return { models: { generateContent } };
+    });
+    const llm = createLlm({ apiKey: "secret", model: "m", requestsPerMinute: 5, acquire: async () => {} });
+    expect(genAiConstructor).not.toHaveBeenCalled();
+
+    expect(await llm.summarize(summaryInput)).toBe("ok");
+    await llm.summarize(summaryInput);
+    expect(genAiConstructor).toHaveBeenCalledTimes(1);
+    expect(genAiConstructor).toHaveBeenCalledWith({ apiKey: "secret" });
   });
 
   it("waits for the rate limiter before every request", async () => {

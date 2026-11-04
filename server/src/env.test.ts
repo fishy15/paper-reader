@@ -28,6 +28,7 @@ describe("loadEnv", () => {
     expect(env.PORT).toBe(3000);
     expect(env.HOST).toBe("127.0.0.1");
     expect(env.GEMINI_RPM).toBe(5);
+    expect(env.GEMINI_MODEL).toBe("gemini-3.5-flash-lite");
     expect(env.GEMINI_API_KEY).toBeUndefined();
     expect(env.S2_API_KEY).toBeUndefined();
     expect(path.isAbsolute(env.DATA_DIR)).toBe(true);

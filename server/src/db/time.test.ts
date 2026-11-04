@@ -55,6 +55,15 @@ describe("toIsoUtc", () => {
     it.each(["2026-10-08T12:00:00Z", "", "not a date", "2026-10-08"])("throws for %j", (value) => {
       expect(() => parseSqliteTimestamp(value)).toThrow();
     });
+
+    it("names the offending value in the error", () => {
+      expect(() => parseSqliteTimestamp("not a date")).toThrow('Invalid SQLite timestamp: "not a date"');
+    });
+  });
+
+  it("stores created_at as a text column", () => {
+    expect(papers.createdAt.getSQLType()).toBe("text");
+    expect(qaMessages.createdAt.getSQLType()).toBe("text");
   });
 
   // Checked by `npm run typecheck`; vitest does not type-check.

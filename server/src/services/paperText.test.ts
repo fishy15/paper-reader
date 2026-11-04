@@ -57,6 +57,13 @@ describe("limitPaperText", () => {
   });
 });
 
+describe("limitPaperText surrogate boundaries", () => {
+  it.each([0xd800, 0xdbff])("drops a lone high surrogate 0x%s left at the cut", (code) => {
+    const out = limitPaperText("x".repeat(MAX_PAPER_CHARS - 1) + String.fromCharCode(code) + "y");
+    expect(out).toBe("x".repeat(MAX_PAPER_CHARS - 1) + TRUNCATION_MARKER);
+  });
+});
+
 describe("loadFullText", () => {
   afterEach(() => {
     vi.clearAllMocks();

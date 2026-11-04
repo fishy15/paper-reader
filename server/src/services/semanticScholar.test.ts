@@ -191,7 +191,10 @@ describe("semantic scholar provider", () => {
 
   it("reports a rate limit after the retry also fails", async () => {
     const provider = createSemanticScholarProvider({ fetchFn: async () => json({}, 429), retryDelayMs: 0 });
-    await expect(provider.search("x", 5)).rejects.toMatchObject({ status: 429 });
+    await expect(provider.search("x", 5)).rejects.toMatchObject({
+      status: 429,
+      message: "Semantic Scholar rate limit reached, try again shortly",
+    });
   });
 
   it.each([404, 500, 503])("reports status %i as a 502 without retrying", async (status) => {
@@ -226,6 +229,12 @@ describe("semantic scholar provider", () => {
     const search = createSemanticScholarProvider({ fetchFn: async () => respond() }).search("x", 5);
     await expect(search).rejects.toBeInstanceOf(SearchProviderError);
     await expect(search).rejects.toMatchObject({ status: 502, message: expect.stringMatching(/Unexpected response/) });
+  });
+
+  it("reports a body that is not JSON as a 502", async () => {
+    const search = createSemanticScholarProvider({ fetchFn: async () => new Response("<html>oops</html>") }).search("x", 5);
+    await expect(search).rejects.toBeInstanceOf(SearchProviderError);
+    await expect(search).rejects.toMatchObject({ status: 502, message: "Unexpected response from Semantic Scholar" });
   });
 
   it("fails the whole search when one result is malformed", async () => {

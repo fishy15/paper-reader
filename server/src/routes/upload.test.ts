@@ -77,6 +77,13 @@ describe("PDF upload", () => {
     expect(new Uint8Array(fs.readFileSync(path.join(deps.dataDir, row.localPdfPath!)))).toEqual(bytes);
   });
 
+  it("trims blank leading and trailing pages from the stored text", async () => {
+    const { app, deps } = makeTestApp();
+    const { id } = await uploadPaper(app, makePdf(["", "Body text", ""]));
+    const row = deps.db.select().from(papers).where(eq(papers.id, id)).get()!;
+    expect(row.fullText).toBe("Body text");
+  });
+
   it("deletes the stored PDF file together with the paper", async () => {
     const { app, deps } = makeTestApp();
     const paper = await uploadPaper(app, makePdf(["Some text"]));
@@ -121,6 +128,7 @@ describe("PDF upload", () => {
     ["my-notes.pdf", "my-notes"],
     ["UPPER.PDF", "UPPER"],
     [".pdf", "Untitled"],
+    ["a.pdf.notes.pdf", "a.pdf.notes"],
   ])("titles a file named %s as %s when the LLM gives no title", async (filename, expected) => {
     const { app } = makeTestApp({
       llm: fakeLlm({ extractMetadata: async () => ({ title: " ", authors: [], year: 2020, abstract: "A" }) }),
@@ -167,6 +175,20 @@ describe("PDF upload", () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "database is locked" });
     expect(fs.readdirSync(path.join(deps.dataDir, "pdfs"))).toEqual([]);
+  });
+
+  it("still returns the database error when the stored file is already gone", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { app, deps } = makeTestApp();
+    const pdfDir = path.join(deps.dataDir, "pdfs");
+    vi.spyOn(deps.db, "insert").mockImplementation(() => {
+      for (const f of fs.readdirSync(pdfDir)) fs.rmSync(path.join(pdfDir, f));
+      throw new Error("database is locked");
+    });
+
+    const res = await upload(app, makePdf(["Some text"]));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "database is locked" });
   });
 
   it("rejects files that are not PDFs", async () => {

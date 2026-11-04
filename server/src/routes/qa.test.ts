@@ -131,7 +131,9 @@ describe("POST /api/papers/:id/ask", () => {
 
   it("returns 404 for a missing paper", async () => {
     const { app } = makeTestApp();
-    expect((await ask(app, 999)).status).toBe(404);
+    const res = await ask(app, 999);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Paper not found" });
   });
 
   it.each([
@@ -401,7 +403,9 @@ describe("GET /api/papers/:id/messages", () => {
 
   it("404s for a missing paper", async () => {
     const { app } = makeTestApp();
-    expect((await app.request("/api/papers/999/messages")).status).toBe(404);
+    const res = await app.request("/api/papers/999/messages");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Paper not found" });
   });
 
   it("400s for a bad id", async () => {
