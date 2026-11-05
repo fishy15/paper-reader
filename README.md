@@ -48,7 +48,11 @@ This starts the API server (port 3000) and the Vite dev server together. Open th
 ```sh
 npm run typecheck   # all workspaces
 npm test            # server and web tests (no network or API key needed)
+npm run mutation -w server   # mutation tests (about 2 minutes); run server and web one at a time
+npm run mutation -w web
 ```
+
+See [MUTATION.md](MUTATION.md) for how the mutation runs are set up and what the scores mean.
 
 ## Layout
 

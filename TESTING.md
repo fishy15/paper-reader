@@ -1,5 +1,7 @@
 # Testing notes
 
+Mutation testing results, setup and the remaining survivors are in [MUTATION.md](MUTATION.md).
+
 ## Coverage gaps
 
 What each uncovered line or branch in the `npm run coverage` report corresponds to. Some entries are

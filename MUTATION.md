@@ -6,7 +6,7 @@ Setup notes:
 - Stryker runs in place because `server/tsconfig.json` extends `../tsconfig.base.json`, which the default sandbox copy can't resolve.
 - There is no TypeScript checker, because TypeScript 7 has no JS API for Stryker to load. Mutants that don't compile count as errors (2 on the server).
 - Incremental mode is off. It reused stale results after test edits and made the first baseline look better than it was.
-- The server config sets `timeoutFactor: 8` and `timeoutMS: 60000`. Stryker counts a timeout as a kill, and at the default limits 46 of 59 server "timeouts" were really survivors that only ran slowly.
+- Both configs set `timeoutFactor: 8` and `timeoutMS: 60000`. Stryker counts a timeout as a kill, and at the default limits 46 of 59 server "timeouts" were really survivors that only ran slowly. On web, the same limits gave an identical 97.71%, so the default limits were not hiding anything there.
 - `server/src/db/schema.ts` is excluded. The tables come from the SQL in `server/drizzle/`, which `drizzle-kit` generates from `schema.ts`, so mutating the constraint, index and `enum` definitions can't change what the tests see.
 - Both configs fail the run if the score drops below 90% (`thresholds.break`).
 - Don't run Stryker while other processes edit the tree. For a clean number, delete `reports` and `.stryker-tmp` in the workspace first.
@@ -57,7 +57,7 @@ Round 2 added 17 tests (351 to 368). The first scores I recorded (92.53% and 98.
 
 ## Web
 
-Both rows are clean runs (no cache). Config is `web/stryker.config.json` (`src/**/*.{ts,tsx}` minus tests, `src/test/**` and `main.tsx`).
+Both rows are clean runs (no cache). The after row was rerun with the generous timeouts and did not change. Config is `web/stryker.config.json` (`src/**/*.{ts,tsx}` minus tests, `src/test/**` and `main.tsx`).
 
 | Snapshot      | Score  | Killed | Timeout | Survived | No coverage |
 | ------------- | ------ | ------ | ------- | -------- | ----------- |
@@ -87,3 +87,5 @@ New tests: `apiError.test.ts`, `queries.test.tsx` (each mutation invalidates onl
 | `Search.tsx:21` (3)       | Only non-search papers' `externalId` is affected, and no search result can collide with it.                  |
 | `Search.tsx:56`           | `save.variables?.`: `isPending` is checked first, so `variables` is always set.                              |
 | `useAskQuestion.ts:21`    | A constant in the effect's dependency array behaves like `[]`.                                               |
+
+The 2 timeouts are `qaStream.ts:32` (`while (true)`) and `qaStream.ts:41` (`if (done) break`). Both are loop mutants that hang the stream reader, so they are genuine kills.

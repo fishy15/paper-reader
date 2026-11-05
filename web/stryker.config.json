@@ -5,5 +5,7 @@
   "inPlace": true,
   "reporters": ["clear-text", "html", "json"],
   "coverageAnalysis": "perTest",
+  "timeoutFactor": 8,
+  "timeoutMS": 60000,
   "thresholds": { "high": 95, "low": 90, "break": 90 }
 }
