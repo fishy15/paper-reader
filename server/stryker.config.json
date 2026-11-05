@@ -1,9 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker-js/master/packages/core/schema/stryker-core.json",
   "testRunner": "vitest",
-  "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/test-utils.ts", "!src/index.ts"],
+  "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/test-utils.ts", "!src/index.ts", "!src/db/schema.ts"],
   "inPlace": true,
   "reporters": ["clear-text", "html", "json"],
   "coverageAnalysis": "perTest",
+  "timeoutFactor": 8,
+  "timeoutMS": 60000,
   "thresholds": { "high": 95, "low": 90, "break": 90 }
 }

@@ -52,7 +52,15 @@ describe("toIsoUtc", () => {
       expect(parseSqliteTimestamp("2026-10-08 12:00:00")).toBe("2026-10-08 12:00:00");
     });
 
-    it.each(["2026-10-08T12:00:00Z", "", "not a date", "2026-10-08"])("throws for %j", (value) => {
+    it.each([
+      "2026-10-08T12:00:00Z",
+      "",
+      "not a date",
+      "2026-10-08",
+      "x2026-10-08 12:00:00",
+      "2026-10-08 12:00:00x",
+      "2026-10-08 12:00:00\n",
+    ])("throws for %j", (value) => {
       expect(() => parseSqliteTimestamp(value)).toThrow();
     });
 
