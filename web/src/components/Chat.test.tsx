@@ -282,6 +282,16 @@ describe("Chat", () => {
     expect(requests).toBe(1);
   });
 
+  it("prevents the browser's default form submission", async () => {
+    useConversation();
+    server.use(http.post("*/api/papers/1/ask", () => new HttpResponse(ndjson([{ type: "done" }]))));
+    const { user } = renderApp(<Chat paperId={1} />);
+    await user.type(input(), "Why?");
+    // fireEvent returns false when the default action was prevented.
+    expect(fireEvent.submit(form())).toBe(false);
+    await waitFor(() => expect(input()).toHaveValue(""));
+  });
+
   it("ignores a second submit while an answer is streaming", async () => {
     useConversation();
     let requests = 0;

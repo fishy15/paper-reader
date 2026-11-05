@@ -41,6 +41,7 @@ describe("PaperCard", () => {
     expect(screen.getByRole("heading", { name: "Attention Is All You Need" })).toBeInTheDocument();
     expect(screen.getByText("No abstract available.")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(document.querySelector(".byline")).toBeNull();
     // Nothing else is rendered: no year, no byline for an empty author list.
     expect(screen.getByRole("article")).toHaveTextContent(/^Attention Is All You Need\s*No abstract available\.$/);
   });

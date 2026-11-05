@@ -1,6 +1,6 @@
 # Mutation testing notes
 
-Run with `npm run mutation -w server` (Stryker, about 3 minutes). Server only; the web workspace has not been run.
+Run with `npm run mutation -w server` (about 3 minutes) or `npm run mutation -w web` (about 2 minutes).
 
 Setup notes:
 - Stryker runs in place because `server/tsconfig.json` extends `../tsconfig.base.json`, which the default sandbox copy can't resolve.
@@ -49,4 +49,33 @@ Per file, baseline to after (files that changed):
 
 ## Web
 
-Not run yet.
+Both rows are clean runs (no cache). Config is `web/stryker.config.json` (`src/**/*.{ts,tsx}` minus tests, `src/test/**` and `main.tsx`).
+
+| Snapshot      | Score  | Killed | Timeout | Survived | No coverage |
+| ------------- | ------ | ------ | ------- | -------- | ----------- |
+| Baseline      | 94.50% | 410    | 2       | 23       | 1           |
+| After round 2 | 97.71% | 424    | 2       | 9        | 1           |
+
+| File                          | Baseline | After   |
+| ----------------------------- | -------- | ------- |
+| `components/UploadBox.tsx`    | 81.08%   | 94.59%  |
+| `components/Chat.tsx`         | 97.56%   | 100.00% |
+| `components/PaperCard.tsx`    | 94.44%   | 100.00% |
+| `pages/Search.tsx`            | 88.24%   | 94.12%  |
+| `apiError.ts`                 | 83.33%   | 100.00% |
+| `queries.ts`                  | 92.00%   | 100.00% |
+
+New tests: `apiError.test.ts`, `queries.test.tsx` (each mutation invalidates only the library list), plus additions to the Chat, PaperCard, Search and UploadBox tests.
+
+### Remaining (10, judged equivalent)
+
+| Location                  | Why it survives                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `qaStream.ts:45`          | `lines.pop() ?? ""`: `split` always returns at least one element, so the fallback never runs (no coverage). |
+| `api.ts:10`               | `hc("/")` vs `hc("")` resolve to the same URLs.                                                              |
+| `api.ts:25`               | `.catch(() => undefined)` vs `null`: `safeParse` fails on both.                                              |
+| `UploadBox.tsx:12`        | `files?.[0]`: `pick` only gets `files` from events where it is never null.                                   |
+| `UploadBox.tsx:37`        | `inputRef.current?.click`: the ref is always set once the button is on screen.                               |
+| `Search.tsx:21` (3)       | Only non-search papers' `externalId` is affected, and no search result can collide with it.                  |
+| `Search.tsx:56`           | `save.variables?.`: `isPending` is checked first, so `variables` is always set.                              |
+| `useAskQuestion.ts:21`    | A constant in the effect's dependency array behaves like `[]`.                                               |

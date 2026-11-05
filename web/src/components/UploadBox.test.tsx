@@ -39,6 +39,47 @@ const zone = () => {
 const named = (name: string) => new File(["%PDF-1.4"], name, { type: "application/pdf" });
 
 describe("UploadBox", () => {
+  it("starts idle: not dragging, with only the prompt text", () => {
+    renderApp(<UploadBox />);
+    expect(zone()).not.toHaveClass("dragging");
+    expect(zone().querySelectorAll("p")).toHaveLength(1);
+  });
+
+  it("shows no notice for a single dropped file", async () => {
+    const uploads = useUpload();
+    renderApp(<UploadBox />);
+    fireEvent.drop(zone(), { dataTransfer: { files: [named("paper.pdf")] } });
+    await waitFor(() => expect(uploads).toEqual(["paper.pdf"]));
+    expect(screen.queryByText(/Only .* was uploaded/)).not.toBeInTheDocument();
+  });
+
+  it("clears the notice on the next single-file upload", async () => {
+    const uploads = useUpload();
+    renderApp(<UploadBox />);
+    fireEvent.drop(zone(), { dataTransfer: { files: [named("a.pdf"), named("b.pdf")] } });
+    await screen.findByText(/Only a\.pdf was uploaded/);
+    await waitFor(() => expect(screen.queryByText(/Uploading/)).not.toBeInTheDocument());
+    fireEvent.drop(zone(), { dataTransfer: { files: [named("c.pdf")] } });
+    await waitFor(() => expect(uploads).toEqual(["a.pdf", "c.pdf"]));
+    expect(screen.queryByText(/Only .* was uploaded/)).not.toBeInTheDocument();
+  });
+
+  it("makes no request at all when no file was chosen", async () => {
+    let requests = 0;
+    server.use(
+      http.post("*/api/papers/upload", () => {
+        requests += 1;
+        return HttpResponse.json(saved, { status: 201 });
+      }),
+    );
+    renderApp(<UploadBox />);
+    fireEvent.change(fileInput(), { target: { files: [] } });
+    fireEvent.drop(zone(), { dataTransfer: { files: [] } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(requests).toBe(0);
+    expect(screen.queryByText(/Uploading/)).not.toBeInTheDocument();
+  });
+
   it("uploads a chosen file and refreshes the library", async () => {
     const received: (FormDataEntryValue | null)[] = [];
     server.use(

@@ -46,6 +46,43 @@ describe("Search", () => {
     expect(queries).toEqual([]);
   });
 
+  it("keeps Search disabled for a whitespace-only query", async () => {
+    serveBackend();
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "   ");
+    expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+    await user.type(box(), "x");
+    expect(screen.getByRole("button", { name: "Search" })).toBeEnabled();
+  });
+
+  it("prevents the browser's default form submission", async () => {
+    serveBackend();
+    const { user } = renderApp(<Search />);
+    await user.type(box(), "graphs");
+    const form = box().closest("form");
+    if (!form) throw new Error("The search box is not inside a form");
+    // fireEvent returns false when the default action was prevented.
+    expect(fireEvent.submit(form)).toBe(false);
+  });
+
+  it("caches results under the search key and query", async () => {
+    const results = [makeSearchResult({ title: "First", externalId: "a" })];
+    serveBackend({ results });
+    const { user, queryClient } = renderApp(<Search />);
+    await user.type(box(), "graphs{Enter}");
+    await screen.findByRole("heading", { name: /First/ });
+    expect(queryClient.getQueryData(["search", "graphs"])).toEqual(results);
+  });
+
+  it("only says nothing was found when the search came back empty", async () => {
+    serveBackend({ results: [makeSearchResult({ title: "First" })] });
+    const { user } = renderApp(<Search />);
+    expect(screen.queryByText("No papers found.")).not.toBeInTheDocument();
+    await user.type(box(), "graphs{Enter}");
+    await screen.findByRole("heading", { name: /First/ });
+    expect(screen.queryByText("No papers found.")).not.toBeInTheDocument();
+  });
+
   it("searches with the trimmed query and lists results", async () => {
     const { queries } = serveBackend({
       results: [makeSearchResult({ title: "First", externalId: "a" }), makeSearchResult({ title: "Second", externalId: "b" })],
