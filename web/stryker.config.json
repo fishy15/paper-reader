@@ -4,5 +4,6 @@
   "mutate": ["src/**/*.{ts,tsx}", "!src/**/*.test.{ts,tsx}", "!src/test/**", "!src/main.tsx"],
   "inPlace": true,
   "reporters": ["clear-text", "html", "json"],
-  "coverageAnalysis": "perTest"
+  "coverageAnalysis": "perTest",
+  "thresholds": { "high": 95, "low": 90, "break": 90 }
 }
