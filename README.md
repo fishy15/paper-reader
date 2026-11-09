@@ -48,9 +48,30 @@ This starts the API server (port 3000) and the Vite dev server together. Open th
 ```sh
 npm run typecheck   # all workspaces
 npm test            # server and web tests (no network or API key needed)
+npm run coverage    # tests with a v8 coverage report for server and web
 npm run mutation -w server   # mutation tests (about 2 minutes); run server and web one at a time
 npm run mutation -w web
 ```
+
+### Running the tests
+
+The tests use [Vitest](https://vitest.dev). They run against an in-memory SQLite database and fake
+Gemini and Semantic Scholar clients (web tests use MSW), so they need no `.env`, network or API key.
+Run `npm install` once at the repo root first.
+
+To run one workspace, or one file, or a single test:
+
+```sh
+npm test -w server                                   # server tests only
+npm test -w web                                      # web tests only
+npm test -w server -- src/routes/qa.test.ts          # one file
+npm test -w web -- -t "shows an error"               # tests whose name matches
+npm run test -w server -- --watch                    # re-run on changes (Vitest watch mode)
+```
+
+`npm run coverage` prints a text table and writes an HTML report to `server/coverage/` and
+`web/coverage/` (open `index.html` in either). Run it for one workspace with `npm run coverage -w server`.
+TESTING.md explains what the remaining uncovered lines are.
 
 See [MUTATION.md](MUTATION.md) for how the mutation runs are set up and what the scores mean.
 
